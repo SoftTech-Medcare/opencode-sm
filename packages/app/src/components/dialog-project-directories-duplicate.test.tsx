@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { createMemo, createResource } from "solid-js"
-import { createComponent, For, render, Show } from "solid-js/web"
+import { createMemo, createResource, createRoot } from "solid-js"
 import type { ProjectDirectory } from "@opencode-ai/sdk/v2"
 
-function DirectoriesView(props: { directories: () => ProjectDirectory[] }) {
-  const filtered = createMemo(() => props.directories() ?? [])
+function buildMemos(directories: () => ProjectDirectory[]) {
+  const filtered = createMemo(() => directories() ?? [])
   const ordered = createMemo(() => {
     const list = filtered()
     const primaryItem = list.find((dir) => dir.primary)
@@ -13,45 +12,11 @@ function DirectoriesView(props: { directories: () => ProjectDirectory[] }) {
   })
   const primary = createMemo(() => ordered().find((dir) => dir.primary))
   const attached = createMemo(() => ordered().filter((dir) => !dir.primary))
-
-  return createComponent("div", {
-    children: () => [
-      createComponent(Show, {
-        when: primary,
-        children: () =>
-          createComponent("div", {
-            "data-testid": "main",
-            "data-dir": () => primary()!.directory,
-            children: () => primary()!.directory,
-          }),
-      }),
-      createComponent(Show, {
-        when: () => attached().length > 0,
-        children: () =>
-          createComponent("div", {
-            "data-testid": "additional",
-            children: () =>
-              createComponent(For, {
-                each: attached,
-                children: (dir: ProjectDirectory) =>
-                  createComponent("div", {
-                    "data-testid": "att-row",
-                    "data-dir": () => dir.directory,
-                    children: () => dir.directory,
-                  }),
-              }),
-          }),
-      }),
-    ],
-  })
-}
-
-function countByTestId(root: Element, testId: string, attr: string) {
-  return Array.from(root.querySelectorAll(`[data-testid="${testId}"]`)).map((n) => n.getAttribute(attr))
+  return { primary, attached }
 }
 
 describe("dialog-project-directories in-place refetch", () => {
-  test("does not duplicate a directory across main and additional after changing primary", () => {
+  test("does not duplicate a directory across main and additional after changing primary", async () => {
     let data: ProjectDirectory[] = [
       { directory: "/softtech", type: "main", primary: true },
       { directory: "/nikkiso", type: "attached", primary: false },
@@ -61,11 +26,13 @@ describe("dialog-project-directories in-place refetch", () => {
       return data
     })
 
-    const host = document.createElement("div")
-    render(() => createComponent(DirectoriesView, { directories }), host)
+    const memos = createRoot(() => buildMemos(directories))
 
-    expect(countByTestId(host, "main", "data-dir")).toEqual(["/softtech"])
-    expect(countByTestId(host, "att-row", "data-dir")).toEqual(["/nikkiso"])
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(memos.primary()!.directory).toBe("/softtech")
+    expect(memos.attached().map((d) => d.directory)).toEqual(["/nikkiso"])
 
     // Simulate clicking "Make main" on /nikkiso, then refetch returning the new state.
     data = [
@@ -74,10 +41,11 @@ describe("dialog-project-directories in-place refetch", () => {
     ]
     refetch()
 
-    return Promise.resolve().then(() => {
-      expect(countByTestId(host, "main", "data-dir")).toEqual(["/nikkiso"])
-      expect(countByTestId(host, "att-row", "data-dir")).toEqual(["/softtech"])
-      expect(countByTestId(host, "att-row", "data-dir")).not.toContain("/nikkiso")
-    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(memos.primary()!.directory).toBe("/nikkiso")
+    expect(memos.attached().map((d) => d.directory)).toEqual(["/softtech"])
+    expect(memos.attached().map((d) => d.directory)).not.toContain("/nikkiso")
   })
 })

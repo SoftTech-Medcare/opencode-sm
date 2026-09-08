@@ -11,6 +11,9 @@ export function PromptWorkspaceSelector(props: {
   projectRoot: string
   workspaces: string[]
   branch?: string
+  repos: { dir: string; branch: string }[]
+  selectedDir?: string
+  onSelect?: (value: string) => void
   onChange: (value: string) => void
   onDone: () => void
 }) {
@@ -93,36 +96,92 @@ export function PromptWorkspaceSelector(props: {
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>
-      <PromptGitStatus branch={props.branch} />
+      <PromptGitStatus
+        repos={props.repos}
+        branch={props.branch}
+        selectedDir={props.selectedDir}
+        onSelect={props.onSelect ?? props.onChange}
+        onDone={props.onDone}
+      />
     </>
   )
 }
 
-export function PromptGitStatus(props: { branch?: string; noGit?: boolean }) {
+export function PromptGitStatus(props: {
+  repos: { dir: string; branch: string }[]
+  branch?: string
+  noGit?: boolean
+  selectedDir?: string
+  onSelect?: (value: string) => void
+  onDone?: () => void
+}) {
   const language = useLanguage()
-  const label = () => {
+  const count = props.repos.length
+
+  const single = () => {
     if (props.noGit) return language.t("session.new.git.none")
-    return props.branch
+    if (count === 0) return undefined
+    return props.repos[0].branch
+  }
+  const multiLabel = () => (props.noGit ? language.t("session.new.git.none") : language.plural("session.new.git.repo", count))
+
+  if (count <= 1) {
+    return (
+      <Show when={single()}>
+        {(value) => (
+          <>
+            <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
+            <TooltipV2
+              placement="top"
+              value={value()}
+              class="min-w-0 max-w-[220px]"
+              contentClass="max-w-[calc(100vw-32px)] break-all"
+            >
+              <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px]">
+                <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                <span class="min-w-0 truncate">{value()}</span>
+              </div>
+            </TooltipV2>
+          </>
+        )}
+      </Show>
+    )
+  }
+
+  const onOpenChange = (open: boolean) => {
+    if (!open) props.onDone?.()
   }
 
   return (
-    <Show when={label()}>
-      {(value) => (
-        <>
-          <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
-          <TooltipV2
-            placement="top"
-            value={value()}
-            class="min-w-0 max-w-[220px]"
-            contentClass="max-w-[calc(100vw-32px)] break-all"
-          >
-            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px]">
-              <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-              <span class="min-w-0 truncate">{value()}</span>
-            </div>
-          </TooltipV2>
-        </>
-      )}
-    </Show>
+    <>
+      <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
+      <MenuV2 placement="bottom" gutter={4} onOpenChange={onOpenChange}>
+        <MenuV2.Trigger class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted">
+          <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+          <span class="min-w-0 truncate">{multiLabel()}</span>
+          <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+        </MenuV2.Trigger>
+        <MenuV2.Portal>
+          <MenuV2.Content class="w-[220px]">
+            <MenuV2.Group>
+              <MenuV2.GroupLabel>{language.t("session.new.git.repos")}</MenuV2.GroupLabel>
+              <For each={props.repos}>
+                {(repo) => (
+                  <MenuV2.Item onSelect={() => props.onSelect?.(repo.dir)}>
+                    <span class="min-w-0 flex-1 flex flex-col gap-0">
+                      <span class="min-w-0 truncate">{getFilename(repo.dir)}</span>
+                      <span class="min-w-0 truncate text-[11px] leading-5 text-v2-text-text-muted">{repo.branch}</span>
+                    </span>
+                    <Show when={props.selectedDir === repo.dir}>
+                      <Icon name="check" size="small" class="shrink-0" />
+                    </Show>
+                  </MenuV2.Item>
+                )}
+              </For>
+            </MenuV2.Group>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
+    </>
   )
 }

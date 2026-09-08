@@ -51,7 +51,11 @@ export function NewSessionView(props: {
                   <Show
                     when={props.workspace.bar.visible()}
                     fallback={
-                      <PromptGitStatus branch={props.workspace.bar.branch()} noGit={!props.workspace.project.git()} />
+                      <PromptGitStatus
+                        repos={props.workspace.bar.repos()}
+                        branch={props.workspace.bar.branch()}
+                        noGit={!props.workspace.project.git()}
+                      />
                     }
                   >
                     <PromptWorkspaceSelector
@@ -59,6 +63,9 @@ export function NewSessionView(props: {
                       projectRoot={props.workspace.project.root()}
                       workspaces={props.workspace.project.workspaces()}
                       branch={props.workspace.bar.branch()}
+                      repos={props.workspace.bar.repos()}
+                      selectedDir={props.workspace.bar.selectedDir()}
+                      onSelect={props.workspace.selection.set}
                       onChange={props.workspace.selection.set}
                       onDone={props.input.restoreFocus}
                     />

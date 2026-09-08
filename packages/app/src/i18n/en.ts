@@ -754,6 +754,9 @@ export const dict = {
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existing": "Workspace…",
   "session.new.git.none": "No Git",
+  "session.new.git.repos": "Repositories",
+  "session.new.git.repo.one": "1 repository",
+  "session.new.git.repo.other": "{{count}} repositories",
   "session.new.lastModified": "Last modified",
 
   "session.header.search.placeholder": "Search {{project}}",
