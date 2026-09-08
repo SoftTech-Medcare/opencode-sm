@@ -178,7 +178,7 @@ export function PromptGitStatus(props: {
                     <span class="min-w-0 flex-1 flex flex-col gap-0">
                       <span class="min-w-0 truncate">{getFilename(repo.dir)}</span>
                       <Show when={repo.branch}>
-                        <span class="min-w-0 truncate text-[11px] leading-5 text-v2-text-text-muted">{repo.branch}</span>
+                        <span class="min-w-0 truncate text-[11px] leading-none text-v2-text-text-muted">{repo.branch}</span>
                       </Show>
                     </span>
                     <Show when={props.selectedDir === repo.dir}>
