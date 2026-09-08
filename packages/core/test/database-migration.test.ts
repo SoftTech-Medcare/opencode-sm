@@ -16,6 +16,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import projectDirectoriesMigration from "@opencode-ai/core/database/migration/20260908141918_polite_loners"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -39,6 +40,39 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("backfills project directories with timestamps when upgrading an existing database", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.applyOnly(
+          db,
+          migrations.filter((migration) => migration.id < projectDirectoriesMigration.id),
+        )
+        yield* db.run(sql`
+          INSERT INTO project (id, worktree, sandboxes, time_created, time_updated)
+          VALUES ('proj_legacy', '/repo', '["/attached", "/existing"]', 123, 456)
+        `)
+        yield* db.run(sql`
+          INSERT INTO project_directory (project_id, directory, type, strategy, time_created)
+          VALUES ('proj_legacy', '/existing', 'worktree', 'git', 789)
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [projectDirectoriesMigration])
+        yield* DatabaseMigration.applyOnly(db, [projectDirectoriesMigration])
+
+        expect(
+          yield* db.all(
+            sql`SELECT directory, type, "primary", strategy, time_created FROM project_directory ORDER BY directory`,
+          ),
+        ).toEqual([
+          { directory: "/attached", type: "attached", primary: 0, strategy: null, time_created: 123 },
+          { directory: "/existing", type: "attached", primary: 0, strategy: "git", time_created: 789 },
+          { directory: "/repo", type: "main", primary: 1, strategy: null, time_created: 123 },
+        ])
+      }),
+    )
+  })
+
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {

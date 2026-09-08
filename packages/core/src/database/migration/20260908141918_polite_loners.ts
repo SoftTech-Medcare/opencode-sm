@@ -7,16 +7,16 @@ export default {
     return Effect.gen(function* () {
       yield* tx.run(`ALTER TABLE \`project_directory\` ADD \`primary\` integer NOT NULL DEFAULT 0;`)
       yield* tx.run(`
-        INSERT INTO \`project_directory\` (\`project_id\`, \`directory\`, \`type\`, \`primary\`, \`strategy\`)
-        SELECT \`id\`, \`worktree\`, 'main', 1, NULL FROM \`project\` AS p
+        INSERT INTO \`project_directory\` (\`project_id\`, \`directory\`, \`type\`, \`primary\`, \`strategy\`, \`time_created\`)
+        SELECT \`id\`, \`worktree\`, 'main', 1, NULL, p.\`time_created\` FROM \`project\` AS p
         WHERE NOT EXISTS (
           SELECT 1 FROM \`project_directory\` AS pd
           WHERE pd.\`project_id\` = p.\`id\` AND pd.\`directory\` = p.\`worktree\`
         );
       `)
       yield* tx.run(`
-        INSERT INTO \`project_directory\` (\`project_id\`, \`directory\`, \`type\`, \`primary\`, \`strategy\`)
-        SELECT p.\`id\`, json.\`value\`, 'attached', 0, NULL FROM \`project\` AS p, json_each(p.\`sandboxes\`) AS json
+        INSERT INTO \`project_directory\` (\`project_id\`, \`directory\`, \`type\`, \`primary\`, \`strategy\`, \`time_created\`)
+        SELECT p.\`id\`, json.\`value\`, 'attached', 0, NULL, p.\`time_created\` FROM \`project\` AS p, json_each(p.\`sandboxes\`) AS json
         WHERE json.\`value\` IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM \`project_directory\` AS pd
