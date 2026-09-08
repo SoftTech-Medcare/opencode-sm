@@ -52,10 +52,14 @@ export function createNewSessionWorkspaceController() {
       worktreeBranch: (worktree) => serverSync().child(worktree)[0].vcs?.branch,
     }),
   )
-  const repos = createMemo(() => {
-    const dirs = [...new Set([projectRoot(), ...(sync().project?.sandboxes ?? [])])]
-    return dirs.map((dir) => ({ dir, branch: serverSync().child(dir)[0].vcs?.branch }))
+  const repoDirs = createMemo(() => {
+    const project = sync().project
+    const dirs = project?.directories?.length
+      ? project.directories.map((d) => d.directory)
+      : (project?.sandboxes ?? [])
+    return [...new Set([projectRoot(), ...dirs])]
   })
+  const repos = createMemo(() => repoDirs().map((dir) => ({ dir, branch: serverSync().child(dir)[0].vcs?.branch })))
   const selectedDir = createMemo(() => {
     const v = value()
     return v === "main" || v === "create" ? projectRoot() : v
@@ -70,7 +74,7 @@ export function createNewSessionWorkspaceController() {
     },
     project: {
       root: projectRoot,
-      workspaces: () => sync().project?.sandboxes ?? [],
+      workspaces: () => repoDirs().filter((dir) => dir !== projectRoot()),
       git: () => sync().project?.vcs === "git",
     },
     bar: {

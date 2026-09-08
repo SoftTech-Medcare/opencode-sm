@@ -338,12 +338,22 @@ const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* () {
-      return (yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)).map(fromRow)
+      const rows = yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)
+      return yield* Effect.forEach(rows, (row) =>
+        Effect.gen(function* () {
+          const info = fromRow(row)
+          const directories = yield* projectDirectories.list(row.id)
+          return { ...info, directories: [...directories] }
+        }),
+      )
     })
 
     const get = Effect.fn("Project.get")(function* (id: ProjectV2.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
-      return row ? fromRow(row) : undefined
+      if (!row) return undefined
+      const info = fromRow(row)
+      const directories = yield* projectDirectories.list(id)
+      return { ...info, directories: [...directories] }
     })
 
     const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
