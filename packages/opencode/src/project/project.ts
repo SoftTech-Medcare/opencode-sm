@@ -195,13 +195,16 @@ const layer = Layer.effect(
     const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
       projectID: ProjectV2.ID
       directory: string
+      primary?: boolean
     }) {
       if (input.projectID === ProjectV2.ID.global) return
       const opened = AbsolutePath.make(FSUtil.resolve(input.directory))
       yield* projectDirectories
-        .create({
+        .attach({
           directory: opened,
           projectID: input.projectID,
+          type: input.primary ? "main" : "attached",
+          primary: input.primary ?? false,
         })
         .pipe(
           Effect.catchCause((cause) =>
@@ -300,6 +303,7 @@ const layer = Layer.effect(
       yield* saveProjectDirectory({
         projectID,
         directory: data.directory,
+        primary: projectID !== ProjectV2.ID.global && AbsolutePath.make(result.worktree) === data.directory,
       })
 
       yield* emitUpdated(result)

@@ -112,6 +112,7 @@ export type LocationGetInput = {
 export type LocationGetOutput = {
   readonly directory: string
   readonly workspaceID?: string
+  readonly directories?: ReadonlyArray<string>
   readonly project: { readonly id: string; readonly directory: string }
 }
 
@@ -125,6 +126,7 @@ export type AgentsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -1937,6 +1939,7 @@ export type ModelsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -1996,6 +1999,7 @@ export type ProvidersListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2029,6 +2033,7 @@ export type ProvidersGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2061,6 +2066,7 @@ export type IntegrationsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2113,6 +2119,7 @@ export type IntegrationsGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2191,6 +2198,7 @@ export type IntegrationsConnectOauthOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2216,6 +2224,7 @@ export type IntegrationsAttemptStatusOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data:
@@ -2298,6 +2307,7 @@ export type PermissionsListRequestsOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2454,6 +2464,7 @@ export type FilesListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{ readonly path: string; readonly type: "file" | "directory" }>
@@ -2490,6 +2501,7 @@ export type FilesFindOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{ readonly path: string; readonly type: "file" | "directory" }>
@@ -2505,6 +2517,7 @@ export type CommandsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2527,6 +2540,7 @@ export type SkillsListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2550,6 +2564,7 @@ export type PtysListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2609,6 +2624,7 @@ export type PtysCreateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2634,6 +2650,7 @@ export type PtysGetOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2664,6 +2681,7 @@ export type PtysUpdateOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: {
@@ -2697,6 +2715,7 @@ export type QuestionsListRequestsOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{
@@ -2755,6 +2774,7 @@ export type ReferencesListOutput = {
   readonly location: {
     readonly directory: string
     readonly workspaceID?: string
+    readonly directories?: ReadonlyArray<string>
     readonly project: { readonly id: string; readonly directory: string }
   }
   readonly data: ReadonlyArray<{

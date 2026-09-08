@@ -21,7 +21,7 @@ import { AgentV2 } from "./agent"
 import { SessionV1 } from "./v1/session"
 import { InstallationVersion } from "./installation/version"
 import { Slug } from "./util/slug"
-import { ProjectTable } from "./project/sql"
+import { ProjectTable, ProjectDirectoryTable } from "./project/sql"
 import path from "path"
 import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
@@ -213,6 +213,12 @@ const layer = Layer.effect(
         yield* db
           .insert(ProjectTable)
           .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
+          .onConflictDoNothing()
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(ProjectDirectoryTable)
+          .values({ project_id: project.id, directory: project.directory, type: "main", primary: true, strategy: null })
           .onConflictDoNothing()
           .run()
           .pipe(Effect.orDie)

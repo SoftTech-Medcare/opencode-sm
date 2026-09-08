@@ -79,6 +79,9 @@ describe("node build", () => {
         return Project.Service.of({
           directories: () => Effect.succeed([]),
           resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+          attach: () => Effect.succeed(true),
+          detach: () => Effect.succeed(true),
+          setPrimary: () => Effect.void,
           commit: () => Effect.void,
         })
       }),

@@ -2,13 +2,20 @@ export * as Project from "./project"
 
 import { Schema } from "effect"
 import { define, inventory } from "./event"
-import { NonNegativeInt, optional } from "./schema"
+import { AbsolutePath, NonNegativeInt, optional } from "./schema"
 import { ProjectID } from "./project-id"
 
 export const ID = ProjectID
 export type ID = typeof ID.Type
 
 export const Vcs = Schema.Literal("git").annotate({ identifier: "Project.Vcs" })
+export const DirectoryType = Schema.Literals(["main", "attached"]).annotate({ identifier: "Project.DirectoryType" })
+export const Directory = Schema.Struct({
+  directory: AbsolutePath,
+  type: DirectoryType,
+  primary: Schema.Boolean,
+}).annotate({ identifier: "Project.Directory" })
+export interface Directory extends Schema.Schema.Type<typeof Directory> {}
 export const Icon = Schema.Struct({
   url: optional(Schema.String),
   override: optional(Schema.String),
@@ -37,6 +44,7 @@ export const Info = Schema.Struct({
   commands: optional(Commands),
   time: Time,
   sandboxes: Schema.Array(Schema.String),
+  directories: optional(Schema.Array(Directory)),
 }).annotate({ identifier: "Project" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 

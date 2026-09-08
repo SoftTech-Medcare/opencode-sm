@@ -5,14 +5,16 @@ import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "./fs-util"
 import { Location } from "./location"
+import { AbsolutePath } from "./schema"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
 /**
  * Mutation paths do not accept project references. Relative paths must stay
- * inside the active Location. Absolute paths outside it require separate
- * `external_directory` approval.
+ * inside the active Location or another directory of the same project. Absolute
+ * paths outside every project directory require separate `external_directory`
+ * approval.
  */
 export const ResolveInput = Schema.Struct({
   path: Schema.String,
@@ -44,7 +46,7 @@ export const externalDirectoryPermission = (input: ExternalDirectoryAuthorizatio
 export interface Target {
   /** Canonical existing path, or missing path below a canonical directory. */
   readonly canonical: string
-  /** Permission resource: Location-relative for internal paths, canonical for external paths. */
+  /** Permission resource: owning-directory-relative for internal paths, canonical for external paths. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
 }
@@ -52,7 +54,8 @@ export interface Target {
 export interface Interface {
   /**
    * Resolve a path and derive its permission resources. Relative paths must
-   * stay inside the Location. Absolute paths outside it require separate
+   * stay inside the Location or another directory of the same project. Absolute
+   * paths outside every project directory require separate
    * `external_directory` approval. This does not approve the mutation.
    */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, PathError | FSUtil.Error>
@@ -120,32 +123,37 @@ const layer = Layer.effect(
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
       const relative = !path.isAbsolute(input.path)
       const absolute = path.resolve(location.directory, input.path)
-      const lexicallyInternal = FSUtil.contains(location.directory, absolute)
+      const withinCwd = FSUtil.contains(location.directory, absolute)
+      const attachedDir = location.directories
+        ?.filter((dir) => !FSUtil.contains(location.directory, dir))
+        .find((dir) => FSUtil.contains(dir, absolute))
+      const lexicallyInternal = withinCwd || attachedDir !== undefined
       if (relative && !lexicallyInternal) return yield* new PathError({ path: input.path, reason: "relative_escape" })
 
       const resolved = yield* resolvePath(absolute)
-      if (lexicallyInternal && !FSUtil.contains(locationRoot, resolved.canonical)) {
-        return yield* new PathError({ path: input.path, reason: "location_escape" })
+      if (lexicallyInternal) {
+        const baseRoot = withinCwd ? locationRoot : (yield* fs.realPath(attachedDir as AbsolutePath))
+        if (!FSUtil.contains(baseRoot, resolved.canonical)) {
+          return yield* new PathError({ path: input.path, reason: "location_escape" })
+        }
+        return {
+          canonical: resolved.canonical,
+          resource: slash(path.relative(baseRoot, resolved.canonical) || "."),
+        } satisfies Target
       }
 
-      const external = !lexicallyInternal
-      const resource = external
-        ? slash(resolved.canonical)
-        : slash(path.relative(locationRoot, resolved.canonical) || ".")
       const externalDirectory =
         input.kind === "directory" && resolved.type === "Directory" ? resolved.canonical : resolved.directory
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {
         canonical: resolved.canonical,
-        resource,
-        externalDirectory: external
-          ? {
-              action: "external_directory",
-              directory: externalDirectory,
-              resource: externalResource,
-              save: externalResource,
-            }
-          : undefined,
+        resource: slash(resolved.canonical),
+        externalDirectory: {
+          action: "external_directory",
+          directory: externalDirectory,
+          resource: externalResource,
+          save: externalResource,
+        },
       } satisfies Target
     })
 

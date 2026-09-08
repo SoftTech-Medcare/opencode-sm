@@ -188,11 +188,10 @@ const layer = Layer.effect(
       })
       yield* changed(
         input.projectID,
-        yield* directories.create({
+        yield* directories.attach({
           projectID: input.projectID,
           directory: result.directory,
           strategy: input.strategy,
-          behavior: "replace",
         }),
       )
       return result
@@ -208,7 +207,7 @@ const layer = Layer.effect(
       })
       yield* changed(
         input.projectID,
-        yield* directories.remove({ projectID: input.projectID, directory: copyDirectory }),
+        yield* directories.detach({ projectID: input.projectID, directory: copyDirectory }),
       )
     })
 
@@ -245,18 +244,17 @@ const layer = Layer.effect(
         .transaction((tx) =>
           Effect.all({
             updated: Effect.forEach(discovered, (item) =>
-              directories.create(
-                {
-                  projectID: input.projectID,
-                  directory: item.directory,
-                  strategy: item.strategy,
-                  behavior: "replace",
-                },
-                tx,
-              ),
+               directories.attach(
+                 {
+                   projectID: input.projectID,
+                   directory: item.directory,
+                   strategy: item.strategy,
+                 },
+                 tx,
+               ),
             ),
             removed: Effect.forEach(removed, (directory) =>
-              directories.remove({ projectID: input.projectID, directory }, tx),
+              directories.detach({ projectID: input.projectID, directory }, tx),
             ),
           }),
         )

@@ -83,6 +83,9 @@ function projectV2FailureLayer() {
           directory: input,
           vcs: { type: "git" as const, store: input },
         }),
+      attach: () => Effect.succeed(true),
+      detach: () => Effect.succeed(true),
+      setPrimary: () => Effect.void,
       commit: () => Effect.void,
     }),
   )

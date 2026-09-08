@@ -13,6 +13,7 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Proje
 
 const projectID = Project.ID.make("project-directories")
 const directory = AbsolutePath.make("/tmp/project-directories")
+const unknownDirectory = AbsolutePath.make("/tmp/unknown-directory")
 
 function setup() {
   return Database.Service.use(({ db }) =>
@@ -29,33 +30,72 @@ describe("ProjectDirectories", () => {
   it.effect("decodes directory schemas", () =>
     Effect.sync(() => {
       expect(Schema.decodeUnknownSync(ProjectDirectories.ListInput)({ projectID })).toEqual({ projectID })
-      expect(Schema.decodeUnknownSync(ProjectDirectories.ListOutput)([{ directory }])).toEqual([{ directory }])
+      expect(
+        Schema.decodeUnknownSync(ProjectDirectories.ListOutput)([
+          { directory, type: "main", primary: true },
+        ]),
+      ).toEqual([{ directory, type: "main", primary: true }])
     }),
   )
 
-  it.effect("creates once and ignores conflicts", () =>
+  it.effect("attaches a directory and lists it with its role", () =>
     Effect.gen(function* () {
       yield* setup()
       const service = yield* ProjectDirectories.Service
 
-      expect(yield* service.create({ projectID, directory })).toBe(true)
-      expect(yield* service.create({ projectID, directory, strategy: "git_worktree" })).toBe(false)
-      expect(yield* service.list(projectID)).toEqual([{ directory, strategy: undefined }])
+      expect(yield* service.attach({ projectID, directory })).toBe(true)
+      expect(yield* service.attach({ projectID, directory })).toBe(true)
+      expect(yield* service.list(projectID)).toEqual([{ directory, type: "attached", primary: false, strategy: undefined }])
     }),
   )
 
-  it.effect("replaces the strategy when requested", () =>
+  it.effect("stores and replaces the strategy, type, and primary", () =>
     Effect.gen(function* () {
       yield* setup()
       const service = yield* ProjectDirectories.Service
-      yield* service.create({ projectID, directory, strategy: "old/strategy" })
+      yield* service.attach({ projectID, directory, strategy: "old/strategy" })
+      expect(yield* service.get({ projectID, directory })).toEqual({
+        directory,
+        type: "attached",
+        primary: false,
+        strategy: "old/strategy",
+      })
 
-      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(true)
-      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(false)
-      expect(yield* service.create({ projectID, directory, behavior: "replace" })).toBe(true)
-      expect(yield* service.create({ projectID, directory, behavior: "replace" })).toBe(false)
-      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(true)
-      expect(yield* service.list(projectID)).toEqual([{ directory, strategy: "new/strategy" }])
+      yield* service.attach({ projectID, directory, strategy: "new/strategy", type: "main", primary: true })
+      expect(yield* service.get({ projectID, directory })).toEqual({
+        directory,
+        type: "main",
+        primary: true,
+        strategy: "new/strategy",
+      })
+    }),
+  )
+
+  it.effect("finds a registered directory by path", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* ProjectDirectories.Service
+      yield* service.attach({ projectID, directory })
+
+      expect(yield* service.find(directory)).toEqual({
+        projectID,
+        directory,
+        type: "attached",
+        primary: false,
+        strategy: undefined,
+      })
+      expect(yield* service.find(unknownDirectory)).toBeUndefined()
+    }),
+  )
+
+  it.effect("detaches a registered directory", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* ProjectDirectories.Service
+      yield* service.attach({ projectID, directory })
+      expect(yield* service.detach({ projectID, directory })).toBe(true)
+      expect(yield* service.detach({ projectID, directory })).toBe(false)
+      expect(yield* service.list(projectID)).toEqual([])
     }),
   )
 })

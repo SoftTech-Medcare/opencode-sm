@@ -1,5 +1,6 @@
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"
@@ -14,6 +15,23 @@ const UpdatePayload = Schema.Struct({
   icon: Schema.optional(Project.Info.fields.icon),
   commands: Schema.optional(Project.Info.fields.commands),
 })
+
+export const AttachPayload = Schema.Struct({
+  directory: AbsolutePath,
+  type: Schema.Literals(["main", "attached"]).pipe(Schema.optional),
+  primary: Schema.Boolean.pipe(Schema.optional),
+})
+export type AttachPayload = Schema.Schema.Type<typeof AttachPayload>
+
+export const DetachPayload = Schema.Struct({
+  directory: AbsolutePath,
+})
+export type DetachPayload = Schema.Schema.Type<typeof DetachPayload>
+
+export const PrimaryPayload = Schema.Struct({
+  directory: AbsolutePath,
+})
+export type PrimaryPayload = Schema.Schema.Type<typeof PrimaryPayload>
 
 export const ProjectApi = HttpApi.make("project")
   .add(
@@ -71,6 +89,42 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.directories",
             summary: "List project directories",
             description: "List known local absolute directories for a project.",
+          }),
+        ),
+        HttpApiEndpoint.post("directories.attach", `${root}/:projectID/directories`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: AttachPayload,
+          success: described(ProjectV2.Directories, "Project directories after attach"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.directories.attach",
+            summary: "Attach a project directory",
+            description: "Add a folder or repository to a project so it becomes part of the same workspace.",
+          }),
+        ),
+        HttpApiEndpoint.delete("directories.detach", `${root}/:projectID/directories`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: DetachPayload,
+          success: described(ProjectV2.Directories, "Project directories after detach"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.directories.detach",
+            summary: "Detach a project directory",
+            description: "Remove a folder or repository from a project workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("directories.primary", `${root}/:projectID/directories/primary`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: PrimaryPayload,
+          success: described(ProjectV2.Directories, "Project directories after setting primary"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.directories.primary",
+            summary: "Set the primary project directory",
+            description: "Make an attached directory the primary working directory of a project.",
           }),
         ),
       )

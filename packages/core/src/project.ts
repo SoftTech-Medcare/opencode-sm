@@ -3,6 +3,7 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import path from "path"
+import { and, eq } from "drizzle-orm"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
@@ -10,6 +11,8 @@ import { makeGlobalNode } from "./effect/app-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectories } from "./project/directories"
 import { ProjectSchema } from "./project/schema"
+import { Database } from "./database/database"
+import { ProjectTable, ProjectDirectoryTable } from "./project/sql"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -37,6 +40,9 @@ export interface Resolved {
 export interface Interface {
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
+  readonly attach: (input: ProjectDirectories.AttachInput) => Effect.Effect<boolean>
+  readonly detach: (input: ProjectDirectories.RemoveInput) => Effect.Effect<boolean>
+  readonly setPrimary: (input: { projectID: ID; directory: AbsolutePath }) => Effect.Effect<void>
   /**
    * Temporary bridge method for writing the resolved project ID to the repo-local cache.
    *
@@ -57,9 +63,18 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const projectDirectories = yield* ProjectDirectories.Service
+    const db = (yield* Database.Service).db
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
       return yield* projectDirectories.list(input.projectID)
+    })
+
+    const attach = Effect.fn("Project.attach")(function* (input: ProjectDirectories.AttachInput) {
+      return yield* projectDirectories.attach(input)
+    })
+
+    const detach = Effect.fn("Project.detach")(function* (input: ProjectDirectories.RemoveInput) {
+      return yield* projectDirectories.detach(input)
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -109,28 +124,85 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      const worktree = repo ? repo.worktree : input
+      const vcs = repo ? { type: "git" as const, store: repo.commonDirectory } : undefined
+      const member = yield* projectDirectories.find(worktree)
 
-      const previous = yield* cached(repo.commonDirectory)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-      return {
-        previous,
-        id: id ?? ID.global,
-        directory: repo.worktree,
-        vcs: { type: "git" as const, store: repo.commonDirectory },
+      // Git-identity-based project ID: explicit remote, then repo-local cache,
+      // then the shared root commit (undefined for a repo with no commits).
+      let previous: ID | undefined
+      let gitID: ID | undefined
+      if (repo) {
+        previous = yield* cached(repo.commonDirectory)
+        gitID = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
       }
+
+      // A registered member reuses its project unless the git identity points
+      // elsewhere: a checkout that moved to a new remote must migrate the data
+      // of the project it previously belonged to.
+      if (member !== undefined) {
+        if (gitID !== undefined && gitID !== member.projectID) {
+          return {
+            previous: member.projectID,
+            id: gitID,
+            directory: worktree,
+            vcs,
+          }
+        }
+        return { id: member.projectID, directory: worktree, vcs }
+      }
+
+      if (repo) {
+        return {
+          previous,
+          id: gitID ?? ID.global,
+          directory: worktree,
+          vcs,
+        }
+      }
+
+      return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+    })
+
+    const setPrimary = Effect.fn("Project.setPrimary")(function* (input: { projectID: ID; directory: AbsolutePath }) {
+      const directory = AbsolutePath.make(input.directory)
+      const repo = yield* git.repo.discover(directory)
+      const worktree = repo ? repo.worktree : directory
+      const vcs = repo ? { type: "git" as const, store: repo.commonDirectory } : undefined
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* tx
+            .update(ProjectDirectoryTable)
+            .set({ type: "attached", primary: false })
+            .where(and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.primary, true)))
+            .run()
+          yield* tx
+            .insert(ProjectDirectoryTable)
+            .values({ project_id: input.projectID, directory, type: "main", primary: true, strategy: null })
+            .onConflictDoUpdate({
+              target: [ProjectDirectoryTable.project_id, ProjectDirectoryTable.directory],
+              set: { type: "main", primary: true },
+            })
+            .run()
+          yield* tx
+            .update(ProjectTable)
+            .set({ worktree, vcs: vcs?.type })
+            .where(eq(ProjectTable.id, input.projectID))
+            .run()
+        }),
+      ).pipe(Effect.orDie)
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
       yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
     })
 
-    return Service.of({ directories, resolve, commit })
+    return Service.of({ directories, resolve, attach, detach, setPrimary, commit })
   }),
 )
 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, ProjectDirectories.node],
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node, Database.node],
 })

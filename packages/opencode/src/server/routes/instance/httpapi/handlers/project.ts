@@ -6,6 +6,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
 import { markInstanceForReload } from "../lifecycle"
+import { AttachPayload, DetachPayload, PrimaryPayload } from "../groups/project"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
@@ -53,11 +54,38 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       project.directories({ projectID: ctx.params.projectID }),
     )
 
+    const attach = Effect.fn("ProjectHttpApi.attach")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      payload: AttachPayload
+    }) {
+      yield* project.attach({ ...ctx.payload, projectID: ctx.params.projectID })
+      return yield* project.directories({ projectID: ctx.params.projectID })
+    })
+
+    const detach = Effect.fn("ProjectHttpApi.detach")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      payload: DetachPayload
+    }) {
+      yield* project.detach({ ...ctx.payload, projectID: ctx.params.projectID })
+      return yield* project.directories({ projectID: ctx.params.projectID })
+    })
+
+    const primary = Effect.fn("ProjectHttpApi.primary")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      payload: PrimaryPayload
+    }) {
+      yield* project.setPrimary({ projectID: ctx.params.projectID, directory: ctx.payload.directory })
+      return yield* project.directories({ projectID: ctx.params.projectID })
+    })
+
     return handlers
       .handle("list", list)
       .handle("current", current)
       .handle("initGit", initGit)
       .handle("update", update)
       .handle("directories", directories)
+      .handle("directories.attach", attach)
+      .handle("directories.detach", detach)
+      .handle("directories.primary", primary)
   }),
 )

@@ -14,6 +14,7 @@ export const Ref = Schema.Struct({
 export class Info extends Schema.Class<Info>("Location.Info")({
   directory: AbsolutePath,
   workspaceID: optional(WorkspaceID),
+  directories: optional(Schema.Array(AbsolutePath)),
   project: Schema.Struct({
     id: ProjectID,
     directory: AbsolutePath,
