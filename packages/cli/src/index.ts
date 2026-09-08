@@ -13,6 +13,12 @@ const Handlers = Runtime.handlers(Commands, {
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
   },
+  project: {
+    list: () => import("./commands/handlers/project/list"),
+    attach: () => import("./commands/handlers/project/attach"),
+    detach: () => import("./commands/handlers/project/detach"),
+    primary: () => import("./commands/handlers/project/primary"),
+  },
   migrate: () => import("./commands/handlers/migrate"),
   service: {
     start: () => import("./commands/handlers/service/start"),

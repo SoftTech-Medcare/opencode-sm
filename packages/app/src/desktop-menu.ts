@@ -114,6 +114,11 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       },
       {
         type: "item",
+        labelKey: "desktop.menu.manageDirectories",
+        command: "project.manageDirectories",
+      },
+      {
+        type: "item",
         labelKey: "desktop.menu.settings",
         command: "settings.open",
         accelerator: { windows: "Ctrl+," },

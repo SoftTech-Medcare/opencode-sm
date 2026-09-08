@@ -49,6 +49,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
+import { DialogProjectDirectories } from "./component/dialog-project-directories"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -615,6 +616,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
+        },
+      },
+      {
+        name: "session.directories",
+        title: "Manage directories",
+        category: "Workspace",
+        hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+        slashName: "directories",
+        run: () => {
+          const projectID = project.project()
+          if (!projectID) return
+          dialog.replace(() => <DialogProjectDirectories projectID={projectID} />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({

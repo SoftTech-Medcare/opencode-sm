@@ -27,6 +27,7 @@ export type ProjectSidebarContext = {
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showProjectDirectoriesDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
@@ -65,6 +66,7 @@ const ProjectTile = (props: {
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showProjectDirectoriesDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   closeProject: (directory: string) => void
@@ -150,6 +152,12 @@ const ProjectTile = (props: {
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-manage-directories"
+            onSelect={() => props.showProjectDirectoriesDialog(props.project)}
+          >
+            <ContextMenu.ItemLabel>{props.language.t("sidebar.project.manageDirectories")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
@@ -330,8 +338,9 @@ export const SortableProject = (props: {
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
-      showEditProjectDialog={props.ctx.showEditProjectDialog}
-      toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
+       showEditProjectDialog={props.ctx.showEditProjectDialog}
+       showProjectDirectoriesDialog={props.ctx.showProjectDirectoriesDialog}
+       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}
       setMenu={(value) => setState("menu", value)}

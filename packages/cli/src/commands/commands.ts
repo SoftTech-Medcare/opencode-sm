@@ -26,6 +26,51 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Debugging and troubleshooting tools",
       commands: [Spec.make("agents", { description: "List all agents" })],
     }),
+    Spec.make("project", {
+      description: "Manage project directories",
+      commands: [
+        Spec.make("list", {
+          description: "List directories for the project",
+          params: {
+            project: Flag.string("project").pipe(
+              Flag.withDescription("Project ID (defaults to the current project)"),
+              Flag.optional,
+            ),
+            format: Flag.string("format").pipe(
+              Flag.withDefault("table"),
+              Flag.withDescription("Output format: table or json"),
+            ),
+          },
+        }),
+        Spec.make("attach", {
+          description: "Attach a directory to the project",
+          params: {
+            directory: Argument.string("directory").pipe(
+              Argument.withDescription("Absolute path to the folder or repository"),
+            ),
+            project: Flag.string("project").pipe(Flag.optional),
+          },
+        }),
+        Spec.make("detach", {
+          description: "Detach a directory from the project",
+          params: {
+            directory: Argument.string("directory").pipe(
+              Argument.withDescription("Absolute path to the folder or repository"),
+            ),
+            project: Flag.string("project").pipe(Flag.optional),
+          },
+        }),
+        Spec.make("primary", {
+          description: "Set the primary directory for the project",
+          params: {
+            directory: Argument.string("directory").pipe(
+              Argument.withDescription("Absolute path to the folder or repository"),
+            ),
+            project: Flag.string("project").pipe(Flag.optional),
+          },
+        }),
+      ],
+    }),
     Spec.make("migrate", { description: "Migrate v1 data to v2" }),
     Spec.make("service", {
       description: "Manage the background server",

@@ -76,6 +76,12 @@ export function createHomeProjectsController(home: HomeController) {
           void dialog.show(() => <DialogEditProjectV2 server={conn} project={project} />)
         })
       },
+      manageDirectories: (conn: ServerConnection.Any, project: LocalProject) => {
+        const projectID = project.id === "global" ? undefined : project.id
+        void import("@/components/dialog-project-directories").then(({ DialogProjectDirectories }) => {
+          void dialog.show(() => <DialogProjectDirectories projectID={projectID} server={conn} />)
+        })
+      },
       unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {
         const state = notification.ensureServerState(ServerConnection.key(conn))
         return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)

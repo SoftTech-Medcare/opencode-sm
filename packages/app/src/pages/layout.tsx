@@ -926,6 +926,17 @@ export default function LegacyLayout(props: ParentProps) {
         onSelect: () => navigateProjectByOffset(1),
       },
       {
+        id: "project.manageDirectories",
+        title: language.t("dialog.project.directories.title"),
+        category: language.t("command.category.project"),
+        disabled: !currentProject(),
+        onSelect: () => {
+          const project = currentProject()
+          if (!project) return
+          showProjectDirectoriesDialog(server.current!, project)
+        },
+      },
+      {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
         category: language.t("command.category.provider"),
@@ -1351,6 +1362,15 @@ export default function LegacyLayout(props: ParentProps) {
     void import("@/components/dialog-edit-project").then((x) => {
       if (dialogDead || dialogRun !== run) return
       dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
+    })
+  }
+
+  const showProjectDirectoriesDialog = (conn: ServerConnection.Any, project: LocalProject) => {
+    const run = ++dialogRun
+    void import("@/components/dialog-project-directories").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      const projectID = project.id === "global" ? undefined : project.id
+      dialog.show(() => <x.DialogProjectDirectories projectID={projectID} server={conn} />)
     })
   }
 
@@ -1903,6 +1923,7 @@ export default function LegacyLayout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog: (proj) => showEditProjectDialog(server.current!, proj),
+    showProjectDirectoriesDialog: (proj) => showProjectDirectoriesDialog(server.current!, proj),
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,

@@ -74,7 +74,9 @@ export async function downloadCliToResources() {
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   const dest = windowsify("resources/opencode-cli")
   try {
-    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
+    // bun only extracts package files into a directory that already has a package.json
+    await Bun.write(join(directory, "package.json"), JSON.stringify({ name: "opencode-cli-download", version: "1.0.0" }))
+    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${CLI_VERSION}`}`
     await copyFile(
       join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
       dest,
