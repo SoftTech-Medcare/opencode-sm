@@ -11,7 +11,7 @@ export function PromptWorkspaceSelector(props: {
   projectRoot: string
   workspaces: string[]
   branch?: string
-  repos: { dir: string; branch: string }[]
+  repos: { dir: string; branch?: string }[]
   selectedDir?: string
   onSelect?: (value: string) => void
   onChange: (value: string) => void
@@ -108,7 +108,7 @@ export function PromptWorkspaceSelector(props: {
 }
 
 export function PromptGitStatus(props: {
-  repos: { dir: string; branch: string }[]
+  repos: { dir: string; branch?: string }[]
   branch?: string
   noGit?: boolean
   selectedDir?: string
@@ -170,14 +170,16 @@ export function PromptGitStatus(props: {
                   <MenuV2.Item
                     style={{
                       height: "auto",
-                      padding: "12px 12px",
-                      marginBottom: "4px",
-                      ...(index() === 0 ? { marginTop: "8px" } : {}),
+                      padding: "6px 12px",
+                      marginBottom: "2px",
+                      ...(index() === 0 ? { marginTop: "2px" } : {}),
                     }}
                     onSelect={() => props.onSelect?.(repo.dir)}>
                     <span class="min-w-0 flex-1 flex flex-col gap-0">
                       <span class="min-w-0 truncate">{getFilename(repo.dir)}</span>
-                      <span class="min-w-0 truncate text-[11px] leading-5 text-v2-text-text-muted">{repo.branch}</span>
+                      <Show when={repo.branch}>
+                        <span class="min-w-0 truncate text-[11px] leading-5 text-v2-text-text-muted">{repo.branch}</span>
+                      </Show>
                     </span>
                     <Show when={props.selectedDir === repo.dir}>
                       <Icon name="check" size="small" class="shrink-0" />

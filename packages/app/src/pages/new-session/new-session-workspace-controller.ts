@@ -56,9 +56,7 @@ export function createNewSessionWorkspaceController() {
   )
   const repos = createMemo(() => {
     const dirs = [...new Set([projectRoot(), ...(sync().project?.sandboxes ?? [])])]
-    return dirs
-      .map((dir) => ({ dir, branch: serverSync().child(dir)[0].vcs?.branch }))
-      .filter((r): r is { dir: string; branch: string } => !!r.branch)
+    return dirs.map((dir) => ({ dir, branch: serverSync().child(dir)[0].vcs?.branch }))
   })
   const selectedDir = createMemo(() => {
     const v = value()
