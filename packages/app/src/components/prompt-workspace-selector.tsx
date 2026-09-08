@@ -166,8 +166,15 @@ export function PromptGitStatus(props: {
             <MenuV2.Group>
               <MenuV2.GroupLabel>{language.t("session.new.git.repos")}</MenuV2.GroupLabel>
               <For each={props.repos}>
-                {(repo) => (
-                  <MenuV2.Item onSelect={() => props.onSelect?.(repo.dir)}>
+                {(repo, index) => (
+                  <MenuV2.Item
+                    style={{
+                      height: "auto",
+                      padding: "12px 12px",
+                      marginBottom: "4px",
+                      ...(index() === 0 ? { marginTop: "8px" } : {}),
+                    }}
+                    onSelect={() => props.onSelect?.(repo.dir)}>
                     <span class="min-w-0 flex-1 flex flex-col gap-0">
                       <span class="min-w-0 truncate">{getFilename(repo.dir)}</span>
                       <span class="min-w-0 truncate text-[11px] leading-5 text-v2-text-text-muted">{repo.branch}</span>

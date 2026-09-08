@@ -8,6 +8,7 @@ import type {
   QuestionRequest,
   ReferenceInfo,
   Session,
+  VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
 import type {
   AgentListInput,
@@ -346,6 +347,7 @@ export async function bootstrapDirectory(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
+  onVcs?: (directory: string, info: VcsInfo) => void
   loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
@@ -425,12 +427,28 @@ export async function bootstrapDirectory(input: {
             })),
       () =>
         retry(async () => {
-          if ((await input.protocol) !== "v1") return
-          return input.sdk.vcs.get().then((result) => {
-            const next = { branch: result.data?.branch, default_branch: result.data?.default_branch }
-            input.setStore("vcs", next)
-            if (next) input.vcsCache.setStore("value", next)
-          })
+          const project = input.global.project.find(
+            (item) => item.worktree === input.directory || (item.sandboxes ?? []).includes(input.directory),
+          )
+          const dirs = project
+            ? [...new Set([project.worktree, ...(project.sandboxes ?? [])])]
+            : [input.directory]
+          await Promise.all(
+            dirs.map(async (dir) => {
+              const isCurrent = dir === input.directory
+              if (isCurrent && (await input.protocol) !== "v1") return
+              const result = await input.sdk.vcs.get({ directory: dir }).catch(() => undefined)
+              const branch = result?.data?.branch
+              if (!branch) return
+              const info: VcsInfo = { branch, default_branch: result.data?.default_branch }
+              if (isCurrent) {
+                input.setStore("vcs", info)
+                if (input.vcsCache) input.vcsCache.setStore("value", info)
+              } else if (input.onVcs) {
+                input.onVcs(dir, info)
+              }
+            }),
+          )
         }),
       input.mcp &&
         (() =>

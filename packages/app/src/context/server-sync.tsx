@@ -495,6 +495,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
+        onVcs: (directory, info) => {
+          const [sibling, setSibling] = children.child(directory, { bootstrap: false })
+          setSibling("vcs", info)
+          children.vcsCache.get(directory)?.setStore("value", info)
+        },
         loadSessions,
         translate: language.t,
         queryClient,

@@ -322,7 +322,11 @@ async function attach(directory: string) {
               <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {language.t("dialog.project.directories.mainFolder")}
               </div>
-              <MainRow directory={primary()!} note={language.t("dialog.project.directories.mainNote")} active={activeIndex() === 0} />
+              <MainRow
+                directory={() => primary()!}
+                note={language.t("dialog.project.directories.mainNote")}
+                active={() => activeIndex() === 0}
+              />
             </div>
           </Show>
 
@@ -365,15 +369,14 @@ async function attach(directory: string) {
   )
 }
 
-function MainRow(props: { directory: ProjectDirectory; note: string; active: boolean }) {
-  const dir = props.directory
+function MainRow(props: { directory: () => ProjectDirectory; note: string; active: () => boolean }) {
   return (
-    <div classList={{ "dp-row-active": props.active }} class="w-full rounded-lg border border-border-strong bg-muted px-3 py-3">
+    <div classList={{ "dp-row-active": props.active() }} class="w-full rounded-lg border border-border-strong bg-muted px-3 py-3">
       <div class="flex items-center gap-x-3">
-        <FileIcon node={{ path: dir.directory, type: "directory" }} class="shrink-0 size-4" />
+        <FileIcon node={{ path: props.directory().directory, type: "directory" }} class="shrink-0 size-4" />
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span class="truncate text-sm text-text-strong">{getFilename(dir.directory)}</span>
-          <span class="truncate text-xs text-muted-foreground" title={dir.directory}>{dir.directory}</span>
+          <span class="truncate text-sm text-text-strong">{getFilename(props.directory().directory)}</span>
+          <span class="truncate text-xs text-muted-foreground" title={props.directory().directory}>{props.directory().directory}</span>
         </div>
       </div>
       <div class="mt-1.5 text-xs text-muted-foreground">{props.note}</div>
