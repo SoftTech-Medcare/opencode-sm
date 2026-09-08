@@ -94,6 +94,20 @@ const desktop = [
 ]
 
 export const dict = {
+  "dialog.project.directories.title": "Manage directories",
+  "dialog.project.directories.description": "Attach additional folders or repositories to this project so sessions can run from any of them.",
+  "dialog.project.directories.add": "Add directory",
+  "dialog.project.directories.remove": "Remove",
+  "dialog.project.directories.setPrimary": "Set as primary",
+  "dialog.project.directories.primary": "Primary directory",
+  "dialog.project.directories.main": "Main",
+  "dialog.project.directories.attached": "Attached",
+  "dialog.project.directories.empty": "No additional directories are attached to this project.",
+  "dialog.project.directories.remove.confirm.title": "Remove directory",
+  "dialog.project.directories.remove.confirm.message": "Remove {{name}} from this project? Sessions started here will no longer be associated with it.",
+  "dialog.project.directories.loading": "Loading directories…",
+  "sidebar.project.manageDirectories": "Manage directories…",
+  "home.project.manageDirectories": "Manage directories…",
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Tillögur",
   "command.category.view": "Skoða",

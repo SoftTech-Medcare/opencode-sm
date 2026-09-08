@@ -133,7 +133,13 @@ import type {
   ProjectCommands,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
+  ProjectDirectoriesAttachErrors,
+  ProjectDirectoriesAttachResponses,
+  ProjectDirectoriesDetachErrors,
+  ProjectDirectoriesDetachResponses,
   ProjectDirectoriesErrors,
+  ProjectDirectoriesPrimaryErrors,
+  ProjectDirectoriesPrimaryResponses,
   ProjectDirectoriesResponses,
   ProjectIcon,
   ProjectInitGitErrors,
@@ -2527,6 +2533,165 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Directories extends HeyApiClient {
+  /**
+   * Detach a project directory
+   *
+   * Remove a folder or repository from a project workspace.
+   */
+  public detach<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ProjectDirectoriesDetachResponses,
+      ProjectDirectoriesDetachErrors,
+      ThrowOnError
+    >({
+      url: "/project/{projectID}/directories",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Attach a project directory
+   *
+   * Add a folder or repository to a project so it becomes part of the same workspace.
+   */
+  public attach<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      type?: "main" | "attached"
+      primary?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "type" },
+            { in: "body", key: "primary" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProjectDirectoriesAttachResponses,
+      ProjectDirectoriesAttachErrors,
+      ThrowOnError
+    >({
+      url: "/project/{projectID}/directories",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set the primary project directory
+   *
+   * Make an attached directory the primary working directory of a project.
+   */
+  public primary<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProjectDirectoriesPrimaryResponses,
+      ProjectDirectoriesPrimaryErrors,
+      ThrowOnError
+    >({
+      url: "/project/{projectID}/directories/primary",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Project extends HeyApiClient {
   /**
    * List all projects
@@ -2691,6 +2856,11 @@ export class Project extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _directories?: Directories
+  get directories2(): Directories {
+    return (this._directories ??= new Directories({ client: this.client }))
   }
 }
 

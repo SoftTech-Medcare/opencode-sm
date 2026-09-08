@@ -1488,6 +1488,7 @@ export type GlobalEvent = {
           commands?: ProjectCommands
           time: ProjectTime
           sandboxes: Array<string>
+          directories?: Array<ProjectDirectory>
         }
       }
     | {
@@ -2433,6 +2434,7 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
+  directories?: Array<ProjectDirectory>
 }
 
 export type ProjectNotFoundError = {
@@ -3186,6 +3188,14 @@ export type ProjectTime = {
   initialized?: number
 }
 
+export type ProjectDirectoryType = "main" | "attached"
+
+export type ProjectDirectory = {
+  directory: string
+  type: ProjectDirectoryType
+  primary: boolean
+}
+
 export type EventServerInstanceDisposed = {
   id: string
   type: "server.instance.disposed"
@@ -3849,6 +3859,8 @@ export type ConfigV2ExperimentalPolicy = {
 
 export type ProjectDirectories = Array<{
   directory: string
+  type: "main" | "attached"
+  primary: boolean
   strategy?: string
 }>
 
@@ -3865,6 +3877,7 @@ export type WorkspaceEventConnectionStatus = {
 export type LocationInfo = {
   directory: string
   workspaceID?: string
+  directories?: Array<string>
   project: {
     id: string
     directory: string
@@ -5910,6 +5923,7 @@ export type ProjectUpdated = {
     commands?: ProjectCommands
     time: ProjectTime
     sandboxes: Array<string>
+    directories?: Array<ProjectDirectory>
   }
 }
 
@@ -6928,6 +6942,7 @@ export type EventProjectUpdated = {
     commands?: ProjectCommands
     time: ProjectTime
     sandboxes: Array<string>
+    directories?: Array<ProjectDirectory>
   }
 }
 
@@ -8827,6 +8842,39 @@ export type ProjectUpdateResponses = {
 
 export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
 
+export type ProjectDirectoriesDetachData = {
+  body?: {
+    directory: string
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}/directories"
+}
+
+export type ProjectDirectoriesDetachErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectDirectoriesDetachError = ProjectDirectoriesDetachErrors[keyof ProjectDirectoriesDetachErrors]
+
+export type ProjectDirectoriesDetachResponses = {
+  /**
+   * Project directories after detach
+   */
+  200: ProjectDirectories
+}
+
+export type ProjectDirectoriesDetachResponse =
+  ProjectDirectoriesDetachResponses[keyof ProjectDirectoriesDetachResponses]
+
 export type ProjectDirectoriesData = {
   body?: never
   path: {
@@ -8856,6 +8904,74 @@ export type ProjectDirectoriesResponses = {
 }
 
 export type ProjectDirectoriesResponse = ProjectDirectoriesResponses[keyof ProjectDirectoriesResponses]
+
+export type ProjectDirectoriesAttachData = {
+  body?: {
+    directory: string
+    type?: "main" | "attached"
+    primary?: boolean
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}/directories"
+}
+
+export type ProjectDirectoriesAttachErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectDirectoriesAttachError = ProjectDirectoriesAttachErrors[keyof ProjectDirectoriesAttachErrors]
+
+export type ProjectDirectoriesAttachResponses = {
+  /**
+   * Project directories after attach
+   */
+  200: ProjectDirectories
+}
+
+export type ProjectDirectoriesAttachResponse =
+  ProjectDirectoriesAttachResponses[keyof ProjectDirectoriesAttachResponses]
+
+export type ProjectDirectoriesPrimaryData = {
+  body?: {
+    directory: string
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}/directories/primary"
+}
+
+export type ProjectDirectoriesPrimaryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectDirectoriesPrimaryError = ProjectDirectoriesPrimaryErrors[keyof ProjectDirectoriesPrimaryErrors]
+
+export type ProjectDirectoriesPrimaryResponses = {
+  /**
+   * Project directories after setting primary
+   */
+  200: ProjectDirectories
+}
+
+export type ProjectDirectoriesPrimaryResponse =
+  ProjectDirectoriesPrimaryResponses[keyof ProjectDirectoriesPrimaryResponses]
 
 export type ExperimentalProjectCopyGenerateNameData = {
   body?: {
