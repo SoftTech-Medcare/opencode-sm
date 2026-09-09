@@ -306,11 +306,13 @@ const layer = Layer.effect(
         primary: projectID !== ProjectV2.ID.global && AbsolutePath.make(result.worktree) === data.directory,
       })
 
-      yield* emitUpdated(result)
+      const directories = yield* projectDirectories.list(projectID)
+      const withDirectories = { ...result, directories: [...directories] }
+      yield* emitUpdated(withDirectories)
       if (projectID !== ProjectV2.ID.global && data.vcs?.type === "git") {
         yield* projectV2.commit({ store: data.vcs.store, id: data.id })
       }
-      return { project: result, sandbox: data.vcs ? data.directory : worktree }
+      return { project: withDirectories, sandbox: data.vcs ? data.directory : worktree }
     })
 
     const discover = Effect.fn("Project.discover")(function* (input: Info) {
