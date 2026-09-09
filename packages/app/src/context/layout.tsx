@@ -464,7 +464,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of serverSync().data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
+          map.set(pathKey(sandbox), project.worktree)
         }
       }
       return map
@@ -475,26 +475,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (map.size === 0) return directory
 
       const visited = new Set<string>()
-      const chain = [directory]
+      let currentDir = directory
+      let currentKey = pathKey(directory)
 
-      while (chain.length) {
-        const current = chain[chain.length - 1]
-        if (!current) return directory
+      while (true) {
+        if (!currentKey) return currentDir
 
-        const next = map.get(current)
-        if (!next) return current
+        const next = map.get(currentKey)
+        if (!next) return currentDir
 
-        if (visited.has(next)) return directory
-        visited.add(next)
-        chain.push(next)
+        if (visited.has(currentKey)) return currentDir
+        visited.add(currentKey)
+        currentDir = next
+        currentKey = pathKey(next)
       }
-
-      return directory
     }
 
     createEffect(() => {
       const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+      const seen = new Set(projects.map((project) => pathKey(project.worktree)))
 
       batch(() => {
         for (const project of projects) {
@@ -503,9 +502,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
           server.projects.remove(project.worktree)
 
-          if (!seen.has(root)) {
+          const rootKey = pathKey(root)
+          if (!seen.has(rootKey)) {
             server.projects.open(root)
-            seen.add(root)
+            seen.add(rootKey)
           }
 
           if (project.expanded) server.projects.expand(root)
