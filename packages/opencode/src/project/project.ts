@@ -168,11 +168,12 @@ const layer = Layer.effect(
                   .run()
               }
 
-              // Project directories may be shared across distinct
-              // checkouts which have diverged. Clear the directory
-              // list and rely on it being re-populated to ensure
-              // accuracy
-              yield* d.delete(ProjectDirectoryTable).where(eq(ProjectDirectoryTable.project_id, oldID)).run()
+              // Update project directories to the new project ID
+              yield* d
+                .update(ProjectDirectoryTable)
+                .set({ project_id: newID })
+                .where(eq(ProjectDirectoryTable.project_id, oldID))
+                .run()
 
               yield* d
                 .update(SessionTable)

@@ -7,11 +7,14 @@ import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
 import { markInstanceForReload } from "../lifecycle"
 import { AttachPayload, DetachPayload, PrimaryPayload } from "../groups/project"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/schema/project-directories"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Project.Service
     const project = yield* ProjectV2.Service
+    const events = yield* EventV2.Service
 
     const list = Effect.fn("ProjectHttpApi.list")(function* () {
       return yield* svc.list()
@@ -59,6 +62,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       payload: AttachPayload
     }) {
       yield* project.attach({ ...ctx.payload, projectID: ctx.params.projectID })
+      yield* events.publish(Event.Updated, { projectID: ctx.params.projectID })
       return yield* project.directories({ projectID: ctx.params.projectID })
     })
 
@@ -67,6 +71,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       payload: DetachPayload
     }) {
       yield* project.detach({ ...ctx.payload, projectID: ctx.params.projectID })
+      yield* events.publish(Event.Updated, { projectID: ctx.params.projectID })
       return yield* project.directories({ projectID: ctx.params.projectID })
     })
 
@@ -75,6 +80,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       payload: PrimaryPayload
     }) {
       yield* project.setPrimary({ projectID: ctx.params.projectID, directory: ctx.payload.directory })
+      yield* events.publish(Event.Updated, { projectID: ctx.params.projectID })
       return yield* project.directories({ projectID: ctx.params.projectID })
     })
 

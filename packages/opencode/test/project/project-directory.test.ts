@@ -176,7 +176,7 @@ describe("Project directory persistence", () => {
     }),
   )
 
-  it.live("clears stale directories when the project id changes", () =>
+  it.live("preserves directories when the project id changes", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })
       const project = yield* Project.Service
@@ -195,8 +195,11 @@ describe("Project directory persistence", () => {
 
       yield* project.fromDirectory(tmp)
 
-      expect(yield* directories(original.project.id)).toEqual([])
-      expect(yield* directories(remoteID)).toEqual([{ directory: AbsolutePath.make(tmp), strategy: undefined }])
+      // Directories are preserved during project ID migration
+      expect(yield* directories(remoteID)).toEqual([
+        { directory: AbsolutePath.make(tmp), strategy: undefined },
+        { directory: stale, strategy: undefined },
+      ])
     }),
   )
 })

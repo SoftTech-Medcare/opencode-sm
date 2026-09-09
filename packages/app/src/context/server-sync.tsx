@@ -564,7 +564,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         eventType === "config.updated" ||
         eventType === "catalog.updated" ||
         eventType === "agent.updated" ||
-        eventType === "project.directories.updated"
+        eventType === "project.directories.updated" ||
+        eventType === "ProjectDirectories.Updated"
       )
         bootstrap.refetch()
       if (eventType === "server.connected" || eventType === "global.disposed") {
