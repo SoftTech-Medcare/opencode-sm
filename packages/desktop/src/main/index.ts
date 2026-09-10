@@ -406,8 +406,6 @@ const main = Effect.gen(function* () {
     logger.log("loading task finished")
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
-  yield* Fiber.await(loadingTask)
-
   app.on("window-all-closed", () => {
     if (process.platform === "darwin") return
     app.quit()
@@ -417,8 +415,13 @@ const main = Effect.gen(function* () {
     restoreMainWindows()
   })
 
+  // Create the window before the sidecar finishes booting so the renderer can
+  // render its loading splash across the whole startup instead of showing a
+  // blank screen while the server starts.
   const windows = restoreMainWindows()
   if (windows.length) createMenu(menuDeps)
+
+  yield* Fiber.await(loadingTask)
 })
 
 Effect.runFork(main)
