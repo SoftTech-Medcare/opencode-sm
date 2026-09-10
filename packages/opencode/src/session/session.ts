@@ -34,6 +34,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
@@ -509,11 +510,47 @@ const layer: Layer.Layer<
       permission?: PermissionV1.Ruleset
     }) {
       const ctx = yield* InstanceState.context
+      const projectID = ctx.project.id
+      const now = Date.now()
+
+      // Ensure the project row exists before creating the session.
+      // The instance context may hold a stale project ID if the project
+      // was migrated (e.g., git remote changed) after the instance loaded.
+      // Upsert the project to guarantee referential integrity.
+      const projectRow = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, projectID))
+        .get()
+        .pipe(Effect.orDie)
+
+      if (!projectRow) {
+        yield* db
+          .insert(ProjectTable)
+          .values({
+            id: projectID,
+            worktree: AbsolutePath.make(ctx.worktree),
+            vcs: null,
+            name: null,
+            icon_url: null,
+            icon_url_override: null,
+            icon_color: null,
+            time_created: now,
+            time_updated: now,
+            time_initialized: null,
+            sandboxes: [],
+            commands: null,
+          })
+          .onConflictDoNothing()
+          .run()
+          .pipe(Effect.orDie)
+      }
+
       const result: Info = {
         id: SessionID.descending(input.id),
         slug: Slug.create(),
         version: InstallationVersion,
-        projectID: ctx.project.id,
+        projectID,
         directory: input.directory,
         path: input.path,
         workspaceID: input.workspaceID,
@@ -526,8 +563,8 @@ const layer: Layer.Layer<
         cost: 0,
         tokens: EmptyTokens,
         time: {
-          created: Date.now(),
-          updated: Date.now(),
+          created: now,
+          updated: now,
         },
       }
       yield* Effect.logInfo("created", result)
