@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -169,6 +169,24 @@ const layer = Layer.effect(
               }
 
               // Update project directories to the new project ID
+              // First delete any directories that are already associated with the new project
+              // to avoid UNIQUE constraint violations
+              const oldDirs = yield* d
+                .select({ directory: ProjectDirectoryTable.directory })
+                .from(ProjectDirectoryTable)
+                .where(eq(ProjectDirectoryTable.project_id, oldID))
+              yield* d
+                .delete(ProjectDirectoryTable)
+                .where(
+                  and(
+                    eq(ProjectDirectoryTable.project_id, newID),
+                    inArray(
+                      ProjectDirectoryTable.directory,
+                      oldDirs.map((dir) => dir.directory),
+                    ),
+                  ),
+                )
+                .run()
               yield* d
                 .update(ProjectDirectoryTable)
                 .set({ project_id: newID })
