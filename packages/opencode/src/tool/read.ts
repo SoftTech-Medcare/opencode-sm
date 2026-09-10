@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -64,7 +65,7 @@ type Metadata = {
 export const ReadTool = Tool.define<
   typeof Parameters,
   Metadata,
-  FSUtil.Service | Instruction.Service | LSP.Service | Scope.Scope
+  FSUtil.Service | Instruction.Service | LSP.Service | WorkspaceDirectories.Service | Scope.Scope
 >(
   "read",
   Effect.gen(function* () {
@@ -72,6 +73,7 @@ export const ReadTool = Tool.define<
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
     const scope = yield* Scope.Scope
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
       const dir = path.dirname(filepath)
@@ -232,9 +234,40 @@ export const ReadTool = Tool.define<
     ) {
       const instance = yield* InstanceState.context
       let filepath = params.filePath
+
+      // Try to resolve across workspace directories first
       if (!path.isAbsolute(filepath)) {
-        filepath = path.resolve(instance.directory, filepath)
+        // Try current directory first
+        const currentPath = path.resolve(instance.directory, filepath)
+        const currentStat = yield* fs.stat(currentPath).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
+        if (currentStat) {
+          filepath = currentPath
+        } else {
+          // Try workspace directories
+          const workspaceID = yield* InstanceState.workspaceID
+          if (workspaceID) {
+            const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+              Effect.catch(() => Effect.succeed([]))
+            )
+            for (const dir of directories) {
+              const dirPath = path.resolve(dir.directory, filepath)
+              const dirStat = yield* fs.stat(dirPath).pipe(
+                Effect.catch(() => Effect.succeed(undefined)),
+              )
+              if (dirStat) {
+                filepath = dirPath
+                break
+              }
+            }
+          }
+          if (filepath === params.filePath) {
+            filepath = path.resolve(instance.directory, filepath)
+          }
+        }
       }
+
       if (process.platform === "win32") {
         filepath = FSUtil.normalizePath(filepath)
       }

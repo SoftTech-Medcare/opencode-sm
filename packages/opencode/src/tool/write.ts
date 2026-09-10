@@ -14,6 +14,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -31,6 +32,7 @@ export const WriteTool = Tool.define(
     const fs = yield* FSUtil.Service
     const events = yield* EventV2Bridge.Service
     const format = yield* Format.Service
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     return {
       description: DESCRIPTION,
@@ -38,9 +40,38 @@ export const WriteTool = Tool.define(
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
-          const filepath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(instance.directory, params.filePath)
+          let filepath = params.filePath
+          if (!path.isAbsolute(filepath)) {
+            // Try current directory first
+            const currentPath = path.resolve(instance.directory, filepath)
+            const currentStat = yield* fs.stat(currentPath).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (currentStat) {
+              filepath = currentPath
+            } else {
+              // Try workspace directories
+              const workspaceID = yield* InstanceState.workspaceID
+              if (workspaceID) {
+                const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+                  Effect.catch(() => Effect.succeed([]))
+                )
+                for (const dir of directories) {
+                  const dirPath = path.resolve(dir.directory, filepath)
+                  const dirStat = yield* fs.stat(dirPath).pipe(
+                    Effect.catch(() => Effect.succeed(undefined)),
+                  )
+                  if (dirStat) {
+                    filepath = dirPath
+                    break
+                  }
+                }
+              }
+              if (filepath === params.filePath) {
+                filepath = path.join(instance.directory, filepath)
+              }
+            }
+          }
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)

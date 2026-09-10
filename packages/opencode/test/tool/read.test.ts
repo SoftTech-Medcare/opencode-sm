@@ -18,6 +18,7 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import {
   disposeAllInstances,
   provideInstance,
@@ -54,6 +55,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       LSP.node,
       Ripgrep.node,
       Truncate.node,
+      WorkspaceDirectories.node,
     ]),
   )
 

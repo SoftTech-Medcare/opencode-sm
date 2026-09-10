@@ -13,6 +13,7 @@ import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -41,6 +42,7 @@ const it = testEffect(
       CrossSpawnSpawner.node,
       Truncate.node,
       Agent.node,
+      WorkspaceDirectories.node,
     ]),
   ),
 )

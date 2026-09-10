@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -62,6 +63,7 @@ export const EditTool = Tool.define(
     const afs = yield* FSUtil.Service
     const format = yield* Format.Service
     const events = yield* EventV2Bridge.Service
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     return {
       description: DESCRIPTION,
@@ -77,9 +79,38 @@ export const EditTool = Tool.define(
           }
 
           const instance = yield* InstanceState.context
-          const filePath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(instance.directory, params.filePath)
+          let filePath = params.filePath
+          if (!path.isAbsolute(filePath)) {
+            // Try current directory first
+            const currentPath = path.resolve(instance.directory, filePath)
+            const currentStat = yield* afs.stat(currentPath).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (currentStat) {
+              filePath = currentPath
+            } else {
+              // Try workspace directories
+              const workspaceID = yield* InstanceState.workspaceID
+              if (workspaceID) {
+                const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+                  Effect.catch(() => Effect.succeed([]))
+                )
+                for (const dir of directories) {
+                  const dirPath = path.resolve(dir.directory, filePath)
+                  const dirStat = yield* afs.stat(dirPath).pipe(
+                    Effect.catch(() => Effect.succeed(undefined)),
+                  )
+                  if (dirStat) {
+                    filePath = dirPath
+                    break
+                  }
+                }
+              }
+              if (filePath === params.filePath) {
+                filePath = path.join(instance.directory, filePath)
+              }
+            }
+          }
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""

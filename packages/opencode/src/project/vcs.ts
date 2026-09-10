@@ -7,6 +7,7 @@ import { Git } from "@/git"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 
 const PATCH_CONTEXT_LINES = 2_147_483_647
 const MAX_PATCH_BYTES = 10_000_000
@@ -295,12 +296,14 @@ interface State {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const git = yield* Git.Service
-    const events = yield* EventV2Bridge.Service
-    const scope = yield* Scope.Scope
+const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service | WorkspaceDirectories.Service> =
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const git = yield* Git.Service
+      const events = yield* EventV2Bridge.Service
+      const scope = yield* Scope.Scope
+      const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Vcs.state")(function* (ctx) {
@@ -348,18 +351,20 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
       status: Effect.fn("Vcs.status")(function* () {
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
-        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
-        const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+
+        // Get status for primary directory
+        const primaryRef = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+        const [primaryList, primaryStats] = yield* Effect.all(
+          [git.status(ctx.directory), primaryRef ? git.stats(ctx.directory, primaryRef) : Effect.succeed([])],
           { concurrency: 2 },
         )
-        const map = nums(stats)
-        return yield* Effect.forEach(
-          list.toSorted((a, b) => a.file.localeCompare(b.file)),
+        const primaryMap = nums(primaryStats)
+        const primaryResults = yield* Effect.forEach(
+          primaryList.toSorted((a, b) => a.file.localeCompare(b.file)),
           (item) =>
             Effect.gen(function* () {
               const stat =
-                map.get(item.file) ??
+                primaryMap.get(item.file) ??
                 (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
               return {
                 file: item.file,
@@ -369,20 +374,90 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
               } satisfies FileStatus
             }),
         )
+
+        // Get status for other workspace directories
+        const workspaceID = yield* InstanceState.workspaceID
+        if (!workspaceID) return primaryResults
+
+        const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+          Effect.catch(() => Effect.succeed([]))
+        )
+        const otherResults: FileStatus[] = []
+        for (const dir of directories) {
+          if (dir.directory === ctx.directory) continue
+          const dirHasHead = yield* git.hasHead(dir.directory).pipe(Effect.catch(() => Effect.succeed(false)))
+          if (!dirHasHead) continue
+          const [dirList, dirStats] = yield* Effect.all(
+            [git.status(dir.directory), git.stats(dir.directory, "HEAD")],
+            { concurrency: 2 }
+          ).pipe(Effect.catch(() => Effect.succeed([[], []])))
+          const dirMap = nums(dirStats)
+          for (const item of dirList.toSorted((a, b) => a.file.localeCompare(b.file))) {
+            const stat = dirMap.get(item.file)
+            otherResults.push({
+              file: `${dir.directory}/${item.file}`,
+              additions: stat?.additions ?? 0,
+              deletions: stat?.deletions ?? 0,
+              status: item.status,
+            })
+          }
+        }
+
+        return [...primaryResults, ...otherResults]
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
+
+        // Get diff for primary directory
+        let primaryDiffs: FileDiff[]
         if (mode === "git") {
-          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
+          primaryDiffs = yield* track(
+            git,
+            ctx.directory,
+            (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined,
+            options
+          )
+        } else {
+          if (!value.root) {
+            primaryDiffs = []
+          } else if (value.current && value.current === value.root.name) {
+            primaryDiffs = []
+          } else {
+            const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
+            if (!ref) {
+              primaryDiffs = []
+            } else {
+              primaryDiffs = yield* diffAgainstRef(git, ctx.directory, ref, options)
+            }
+          }
         }
 
-        if (!value.root) return []
-        if (value.current && value.current === value.root.name) return []
-        const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
-        if (!ref) return []
-        return yield* diffAgainstRef(git, ctx.directory, ref, options)
+        // Get diffs for other workspace directories
+        const workspaceID = yield* InstanceState.workspaceID
+        if (!workspaceID) return primaryDiffs
+
+        const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+          Effect.catch(() => Effect.succeed([]))
+        )
+        const otherDiffs: FileDiff[] = []
+        for (const dir of directories) {
+          if (dir.directory === ctx.directory) continue
+          const dirHasHead = yield* git.hasHead(dir.directory).pipe(Effect.catch(() => Effect.succeed(false)))
+          if (!dirHasHead) continue
+          const dirDiffs = yield* track(git, dir.directory, "HEAD", options).pipe(
+            Effect.catch(() => Effect.succeed([]))
+          )
+          for (const diff of dirDiffs) {
+            otherDiffs.push({
+              ...diff,
+              file: `${dir.directory}/${diff.file}`,
+            })
+          }
+        }
+
+        return [...primaryDiffs, ...otherDiffs]
       }),
       diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
         const ctx = yield* InstanceState.context
@@ -418,6 +493,10 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Git.node, EventV2Bridge.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Git.node, EventV2Bridge.node, WorkspaceDirectories.node],
+})
 
 export * as Vcs from "./vcs"

@@ -2,6 +2,15 @@ import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
+
+// Broadcast a message to all renderer windows
+export function broadcastToRenderers(channel: string, data?: unknown) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data)
+    }
+  }
+}
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
@@ -24,6 +33,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { handleIpc, handleIpcSync } from "./ipc-error"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -111,33 +121,32 @@ export function registerIpcHandlers(deps: Deps) {
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
   })
-  ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    try {
-      const store = getStore(name)
-      const value = store.get(key)
-      if (value === undefined || value === null) return null
-      return typeof value === "string" ? value : JSON.stringify(value)
-    } catch {
-      return null
-    }
+  handleIpcSync("store-get", (event, name, key) => {
+    const store = getStore(name as string)
+    const value = store.get(key as string)
+    if (value === undefined || value === null) return null
+    return typeof value === "string" ? value : JSON.stringify(value)
   })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
-    getStore(name).set(key, value)
+  handleIpcSync("store-set", (event, name, key, value) => {
+    getStore(name as string).set(key as string, value as string)
+    return null
   })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    getStore(name).delete(key)
-    void removeStoreFileIfEmpty(name)
+  handleIpcSync("store-delete", (event, name, key) => {
+    getStore(name as string).delete(key as string)
+    void removeStoreFileIfEmpty(name as string)
+    return null
   })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
-    getStore(name).clear()
-    void removeStoreFileIfEmpty(name)
+  handleIpcSync("store-clear", (event, name) => {
+    getStore(name as string).clear()
+    void removeStoreFileIfEmpty(name as string)
+    return null
   })
-  ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
+  handleIpcSync("store-keys", (event, name) => {
+    const store = getStore(name as string)
     return Object.keys(store.store)
   })
-  ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
-    const store = getStore(name)
+  handleIpcSync("store-length", (event, name) => {
+    const store = getStore(name as string)
     return Object.keys(store.store).length
   })
   ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))

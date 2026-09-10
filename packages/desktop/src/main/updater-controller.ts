@@ -91,6 +91,11 @@ export function createUpdaterController(input: {
           throw error
         })
     },
+    startPeriodicChecks(intervalMs: number = 6 * 60 * 60 * 1000) {
+      if (!input.enabled) return () => {}
+      const interval = setInterval(check, intervalMs)
+      return () => clearInterval(interval)
+    },
   }
 }
 

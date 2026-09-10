@@ -11,6 +11,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -48,7 +49,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const layer: Layer.Layer<
   Service,
   never,
-  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service
+  FSUtil.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service | WorkspaceDirectories.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -56,6 +57,7 @@ const layer: Layer.Layer<
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
     const globalFiles = [
       path.join(global.config, "AGENTS.md"),
@@ -121,6 +123,7 @@ const layer: Layer.Layer<
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        // Look in primary directory first
         for (const file of instructionFiles) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
@@ -128,6 +131,24 @@ const layer: Layer.Layer<
           if (matches.length > 0) {
             matches.forEach((item) => paths.add(path.resolve(item)))
             break
+          }
+        }
+
+        // Also look in all attached workspace directories
+        const workspaceID = yield* InstanceState.workspaceID
+        if (workspaceID) {
+          const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+            Effect.catch(() => Effect.succeed([]))
+          )
+          for (const dir of directories) {
+            if (dir.directory === ctx.directory) continue // Already checked primary
+            for (const file of instructionFiles) {
+              const dirPath = path.join(dir.directory, file)
+              if (yield* fs.existsSafe(dirPath)) {
+                paths.add(path.resolve(dirPath))
+                break
+              }
+            }
           }
         }
       }
@@ -231,7 +252,7 @@ export function loaded(messages: SessionV1.WithParts[]) {
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient],
+  deps: [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient, WorkspaceDirectories.node],
 })
 
 export * as Instruction from "./instruction"
