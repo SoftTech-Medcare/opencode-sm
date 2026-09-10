@@ -76,10 +76,19 @@ export interface GrepInput {
   readonly signal?: AbortSignal
 }
 
+export interface MultiGrepInput {
+  readonly directories: readonly string[]
+  readonly pattern: string
+  readonly include?: string
+  readonly limit: number
+  readonly signal?: AbortSignal
+}
+
 export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
+  readonly grepMulti: (input: MultiGrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Ripgrep") {}
@@ -151,6 +160,94 @@ const layer = Layer.effect(
       )
     }
 
+    const grepForDirectory = (dir: string, input: Omit<MultiGrepInput, "directories">) =>
+      run<RawMatchData>({
+        cwd: dir,
+        limit: input.limit,
+        signal: input.signal,
+        args: [
+          "--no-config",
+          "--json",
+          "--hidden",
+          "--no-messages",
+          ...(input.include ? [`--glob=${input.include}`] : []),
+          "--glob=!**/.git/**",
+          "--",
+          input.pattern,
+          ".",
+        ],
+        parse: (line) =>
+          (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
+            ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
+            : Effect.try({
+                try: () => JSON.parse(line) as unknown,
+                catch: (cause) => failure("Invalid ripgrep JSON output", cause),
+              })
+          ).pipe(
+            Effect.flatMap((json) => {
+              if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
+                return Effect.succeed(undefined)
+              return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
+                Effect.map((match) => ({
+                  ...match.data,
+                  path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
+                  submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
+                })),
+                Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
+              )
+            }),
+          ),
+      }).pipe(
+        Effect.map((result) =>
+          result.items.map((match) => {
+            const relative = match.path.text
+              .replace(/^(?:\.[\\/])+/u, "")
+              .replace(/^[\\/]+/u, "")
+              .replaceAll("\\", "/")
+            return Match.make({
+              entry: Entry.make({
+                path: RelativePath.make(relative),
+                type: "file",
+              }),
+              line: match.line_number,
+              offset: match.absolute_offset,
+              text:
+                match.lines.text.length > 2_000
+                  ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..."
+                  : match.lines.text,
+              submatches: match.submatches.map((submatch) => ({
+                text: submatch.match.text,
+                start: submatch.start,
+                end: submatch.end,
+              })),
+            })
+          }),
+        ),
+        Effect.catchTag("Ripgrep.InvalidPatternError", (e) => Effect.fail(e)),
+        Effect.catchTag("Ripgrep.Error", () => Effect.succeed([])),
+      )
+
+    const grepMulti = Effect.fn("Ripgrep.grepMulti")(function* (input: MultiGrepInput) {
+      if (input.directories.length === 0) return []
+
+      // Run grep in parallel across directories with concurrency limit
+      const results = yield* Effect.all(
+        input.directories.map((dir) => grepForDirectory(dir, input)),
+        { concurrency: 4 },
+      )
+
+      return results.flat()
+    })
+
+    const grep = Effect.fn("Ripgrep.grep")(function* (input: GrepInput) {
+      return yield* grepForDirectory(input.cwd, {
+        pattern: input.pattern,
+        include: input.include,
+        limit: input.limit,
+        signal: input.signal,
+      })
+    })
+
     return Service.of({
       glob: (input) =>
         run<string>({
@@ -215,68 +312,8 @@ const layer = Layer.effect(
           Effect.map((result) => result.items),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
-      grep: (input) =>
-        run<RawMatchData>({
-          ...input,
-          args: [
-            "--no-config",
-            "--json",
-            "--hidden",
-            "--no-messages",
-            ...(input.include ? [`--glob=${input.include}`] : []),
-            "--glob=!**/.git/**",
-            "--",
-            input.pattern,
-            input.file ?? ".",
-          ],
-          parse: (line) =>
-            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
-              : Effect.try({
-                  try: () => JSON.parse(line) as unknown,
-                  catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-                })
-            ).pipe(
-              Effect.flatMap((json) => {
-                if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
-                  return Effect.succeed(undefined)
-                return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({
-                    ...match.data,
-                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
-                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
-                  })),
-                  Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
-                )
-              }),
-            ),
-        }).pipe(
-          Effect.map((result) =>
-            result.items.map((match) => {
-              const relative = match.path.text
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/")
-              return Match.make({
-                entry: Entry.make({
-                  path: RelativePath.make(relative),
-                  type: "file",
-                }),
-                line: match.line_number,
-                offset: match.absolute_offset,
-                text:
-                  match.lines.text.length > 2_000
-                    ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..."
-                    : match.lines.text,
-                submatches: match.submatches.map((submatch) => ({
-                  text: submatch.match.text,
-                  start: submatch.start,
-                  end: submatch.end,
-                })),
-              })
-            }),
-          ),
-        ),
+      grep,
+      grepMulti,
     })
   }),
 )

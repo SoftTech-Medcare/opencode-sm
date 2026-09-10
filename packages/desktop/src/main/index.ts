@@ -29,6 +29,7 @@ import {
   preferAppEnv,
   setDefaultServerUrl,
   spawnLocalServer,
+  startHealthMonitor,
   type SidecarListener,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
@@ -388,6 +389,11 @@ const main = Effect.gen(function* () {
       url,
       username: "opencode",
       password,
+    })
+
+    // Start health monitoring for sidecar
+    startHealthMonitor(url, password, listener, (count) => {
+      logger.log("sidecar health monitor triggered restart", { count })
     })
 
     if (process.platform === "win32") {

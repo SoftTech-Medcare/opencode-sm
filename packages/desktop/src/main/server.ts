@@ -14,7 +14,7 @@ type SidecarMessage =
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
 
-export type SidecarListener = { stop: () => Promise<void> }
+export type SidecarListener = { stop: () => Promise<void>; isRunning: () => boolean }
 
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
@@ -163,6 +163,8 @@ export async function spawnLocalServer(
   })()
 
   let stopping: Promise<void> | undefined
+  let restartCount = 0
+  const MAX_RESTARTS = 5
 
   return {
     listener: {
@@ -178,6 +180,7 @@ export async function spawnLocalServer(
         ])
         return stopping
       },
+      isRunning: () => !exited && !stopping,
     },
     health: { wait },
   }
@@ -236,4 +239,34 @@ function defer<T>() {
     reject = rej
   })
   return { promise, resolve, reject }
+}
+
+export function startHealthMonitor(
+  serverUrl: string,
+  password: string,
+  listener: SidecarListener,
+  onRestart?: (count: number) => void,
+) {
+  let checkInterval: NodeJS.Timeout | null = null
+
+  const check = async () => {
+    if (!listener.isRunning()) return
+
+    const healthy = await checkHealth(serverUrl, password)
+    if (!healthy) {
+      getLogger().warn("Sidecar health check failed, restarting...")
+      try {
+        await listener.stop()
+      } catch {}
+      onRestart?.(1)
+    }
+  }
+
+  checkInterval = setInterval(check, 30000)
+
+  return {
+    stop: () => {
+      if (checkInterval) clearInterval(checkInterval)
+    },
+  }
 }

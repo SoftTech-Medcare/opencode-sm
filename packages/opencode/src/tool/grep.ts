@@ -3,9 +3,12 @@ import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
+
+// WorkspaceDirectories is optional for grep - if not provided, fall back to single-directory search
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The regex pattern to search for in file contents" }),
@@ -48,20 +51,39 @@ export const GrepTool = Tool.define(
           })
 
           const ins = yield* InstanceState.context
-          const requested = path.isAbsolute(params.path ?? ins.directory)
-            ? (params.path ?? ins.directory)
-            : path.join(ins.directory, params.path ?? ".")
-          const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          yield* assertExternalDirectoryEffect(ctx, requested, {
-            bypass: false,
-            kind: requestedInfo?.type === "Directory" ? "directory" : "file",
-          })
 
-          const search = FSUtil.resolve(requested)
-          const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          const cwd = info?.type === "Directory" ? search : path.dirname(search)
+          // If a specific path is provided, search only in that directory
+          if (params.path) {
+            const requested = path.isAbsolute(params.path) ? params.path : path.join(ins.directory, params.path)
+            const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            yield* assertExternalDirectoryEffect(ctx, requested, {
+              bypass: false,
+              kind: requestedInfo?.type === "Directory" ? "directory" : "file",
+            })
+
+            const search = FSUtil.resolve(requested)
+            const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const cwd = info?.type === "Directory" ? search : path.dirname(search)
+            const result = yield* ripgrep.grep({
+              cwd,
+              pattern: params.pattern,
+              include: params.include,
+              limit: 100,
+            })
+            if (result.length === 0) return empty
+
+            const rows = result.map((item) => ({
+              path: path.resolve(requestedInfo?.type === "Directory" ? requested : path.dirname(requested), item.entry.path),
+              line: item.line,
+              text: item.text,
+            }))
+
+            return formatResults(rows, 100, params.pattern)
+          }
+
+          // No path specified: use single-directory grep (workspace-aware search coming in next phase)
           const result = yield* ripgrep.grep({
-            cwd,
+            cwd: ins.directory,
             pattern: params.pattern,
             include: params.include,
             limit: 100,
@@ -69,47 +91,45 @@ export const GrepTool = Tool.define(
           if (result.length === 0) return empty
 
           const rows = result.map((item) => ({
-            path: path.resolve(
-              requestedInfo?.type === "Directory" ? requested : path.dirname(requested),
-              item.entry.path,
-            ),
+            path: path.resolve(ins.directory, item.entry.path),
             line: item.line,
             text: item.text,
           }))
 
-          const limit = 100
-          const truncated = rows.length === limit
-          const final = rows
-          if (final.length === 0) return empty
-
-          const total = rows.length
-          const hasMore = truncated || result.length === limit
-          const output = [`Found ${total} matches${hasMore ? " (more matches available)" : ""}`]
-
-          let current = ""
-          for (const match of final) {
-            if (current !== match.path) {
-              if (current !== "") output.push("")
-              current = match.path
-              output.push(`${match.path}:`)
-            }
-            output.push(`  Line ${match.line}: ${match.text}`)
-          }
-
-          if (truncated) {
-            output.push("")
-            output.push("(Results truncated. Consider using a more specific path or pattern.)")
-          }
-
-          return {
-            title: params.pattern,
-            metadata: {
-              matches: total,
-              truncated,
-            },
-            output: output.join("\n"),
-          }
+          return formatResults(rows, 100, params.pattern)
         }).pipe(Effect.orDie),
     }
   }),
 )
+
+function formatResults(rows: { path: string; line: number; text: string }[], limit: number, pattern: string) {
+  const truncated = rows.length === limit
+  const total = rows.length
+  const hasMore = truncated
+
+  const output = [`Found ${total} matches${hasMore ? " (more matches available)" : ""}`]
+
+  let current = ""
+  for (const match of rows) {
+    if (current !== match.path) {
+      if (current !== "") output.push("")
+      current = match.path
+      output.push(`${match.path}:`)
+    }
+    output.push(`  Line ${match.line}: ${match.text}`)
+  }
+
+  if (truncated) {
+    output.push("")
+    output.push("(Results truncated. Consider using a more specific path or pattern.)")
+  }
+
+  return {
+    title: pattern,
+    metadata: {
+      matches: total,
+      truncated,
+    },
+    output: output.join("\n"),
+  }
+}
