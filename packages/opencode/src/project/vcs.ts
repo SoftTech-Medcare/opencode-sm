@@ -320,10 +320,32 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service | W
         const value = { current, root }
 
         const unsubscribe = yield* events.listen((event) => {
-          if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
+          if (event.type !== Watcher.Event.Updated.type)
             return Effect.void
           const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
           if (!data.file.endsWith("HEAD")) return Effect.void
+
+          // Check if the event is from this directory or any attached workspace directory
+          const eventDir = event.location?.directory
+          if (eventDir !== ctx.directory) {
+            // Check if it's from an attached workspace directory
+            return Effect.gen(function* () {
+              const workspaceID = yield* InstanceState.workspaceID
+              if (!workspaceID) return
+              const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+                Effect.catch(() => Effect.succeed([]))
+              )
+              const isWorkspaceDir = directories.some((d) => d.directory === eventDir)
+              if (!isWorkspaceDir) return
+
+              const next = yield* get()
+              if (next !== value.current) {
+                value.current = next
+                yield* events.publish(Event.BranchUpdated, { branch: next })
+              }
+            })
+          }
+
           return Effect.gen(function* () {
             const next = yield* get()
             if (next !== value.current) {

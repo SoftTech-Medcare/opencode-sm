@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Context, Effect, Layer } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
@@ -58,12 +59,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
 
-const layer = Layer.effect(
+const layer: Layer.Layer<
+  Service,
+  never,
+  Skill.Service | MCP.Service | LocationServiceMap.Service | WorkspaceDirectories.Service
+> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const mcp = yield* MCP.Service
     const locations = yield* LocationServiceMap.Service
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
@@ -71,6 +77,28 @@ const layer = Layer.effect(
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+
+        // Include workspace directory structure if available
+        let workspaceInfo = ""
+        const workspaceID = yield* InstanceState.workspaceID
+        if (workspaceID) {
+          try {
+            const directories = yield* workspaceDirectories.list(workspaceID).pipe(
+              Effect.catch(() => Effect.succeed([]))
+            )
+            if (directories.length > 1) {
+              workspaceInfo = `\n<workspace_directories>\n` +
+                `  This workspace spans ${directories.length} directories:\n` +
+                directories.map((dir) =>
+                  `  - ${dir.directory} (primary: ${dir.primary}${dir.role ? `, role: ${dir.role}` : ""})`
+                ).join("\n") +
+                `\n</workspace_directories>`
+            }
+          } catch {
+            // Ignore errors fetching workspace directories
+          }
+        }
+
         return [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -82,6 +110,7 @@ const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            workspaceInfo,
           ].join("\n"),
           references.length === 0
             ? undefined
@@ -148,7 +177,7 @@ const locationServiceMapNode = LayerNode.make({
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Skill.node, MCP.node, locationServiceMapNode],
+  deps: [Skill.node, MCP.node, locationServiceMapNode, WorkspaceDirectories.node],
 })
 
 export * as SystemPrompt from "./system"
