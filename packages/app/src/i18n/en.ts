@@ -759,6 +759,9 @@ export const dict = {
   "session.new.git.repo.other": "{{count}} repositories",
   "session.new.lastModified": "Last modified",
 
+  "session.header.repositories.one": "1 repository",
+  "session.header.repositories.other": "{{count}} repositories",
+
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
   "session.header.openIn": "Open in",

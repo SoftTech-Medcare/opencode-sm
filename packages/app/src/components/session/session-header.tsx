@@ -506,9 +506,9 @@ export function SessionHeader() {
                   </div>
                 </div>
               }
-            >
-              <SessionHeaderV2Actions state={v2ActionsState()} />
-            </Show>
+              >
+                <SessionHeaderV2Actions state={v2ActionsState()} />
+              </Show>
           </Portal>
         )}
       </Show>

@@ -34,6 +34,7 @@ type PluralKey =
   | "session.followupDock.summary"
   | "session.revertDock.summary"
   | "session.new.git.repo"
+  | "session.header.repositories"
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
