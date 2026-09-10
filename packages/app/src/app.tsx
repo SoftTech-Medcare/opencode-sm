@@ -33,6 +33,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  Suspense,
   type ParentProps,
   Show,
 } from "solid-js"
@@ -213,14 +214,22 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
   const serverKey = () => props.draft.server
 
   return (
-    <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
+    <Show when={props.draft.server} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
           <ModelsProvider directory={directory}>
             <SDKProvider directory={directory}>
               <DirectoryDataProvider directory={directory} server={serverKey}>
                 <DraftProviders>
-                  <NewSession />
+                  <Suspense
+                    fallback={
+                      <div class="flex h-58 w-full items-center justify-center">
+                        <Splash class="w-12 h-16 opacity-40 animate-pulse" />
+                      </div>
+                    }
+                  >
+                    <NewSession />
+                  </Suspense>
                 </DraftProviders>
               </DirectoryDataProvider>
             </SDKProvider>

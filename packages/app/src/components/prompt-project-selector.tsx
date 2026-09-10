@@ -13,6 +13,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { getProjectAvatarVariant } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
@@ -195,6 +196,7 @@ export type PromptProjectController = ReturnType<typeof createPromptProjectContr
 export function PromptProjectSelector(props: {
   controller: PromptProjectController
   placement?: "bottom" | "bottom-start"
+  loading?: boolean
 }) {
   const [triggerReady, setTriggerReady] = createSignal(false)
   let contentRef: HTMLDivElement | undefined
@@ -287,7 +289,12 @@ export function PromptProjectSelector(props: {
         props.controller.setOpen(open)
       }}
     >
-      <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
+      <DropdownMenu.Trigger
+        as={ProjectTrigger}
+        ref={setTriggerRef}
+        controller={props.controller}
+        loading={props.loading}
+      />
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           ref={contentRef}
@@ -455,20 +462,22 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
   )
 }
 
-function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController }) {
-  const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
+function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController; loading?: boolean }) {
+  const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown", "loading"])
+  const language = useLanguage()
   const project = () => local.controller.selected()
   return (
     <button
       {...rest}
       data-action="prompt-project"
       type="button"
+      aria-label={local.loading ? language.t("common.loading") : undefined}
       class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       classList={{
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),
         "bg-v2-overlay-simple-overlay-pressed": local.controller.open(),
-        "text-v2-text-text-muted": local.controller.open(),
+        "text-v2-text-text-muted": local.controller.open() || local.loading,
       }}
       onClick={local.onClick ?? (() => local.controller.setOpen(true))}
       onKeyDown={(event) => {
@@ -495,7 +504,9 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       <span class="min-w-0 truncate leading-5">
         {project() ? displayName(project()!) : local.controller.labels.new()}
       </span>
-      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+      <Show when={local.loading} fallback={<Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />}>
+        <Spinner class="size-[15px] shrink-0 text-v2-icon-icon-muted" />
+      </Show>
     </button>
   )
 }

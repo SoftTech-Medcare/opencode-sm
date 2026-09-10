@@ -31,6 +31,12 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const serverSync = useServerSync()
+  const projectLoading = createMemo(() => {
+    const directory = props.project.selected()?.worktree
+    if (!directory) return false
+    return serverSync().child(directory, { bootstrap: false })[0].status === "loading"
+  })
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
@@ -47,7 +53,7 @@ export function NewSessionView(props: {
               </Show>
               <Show when={props.project.selected()}>
                 <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
-                  <PromptProjectSelector controller={props.project} placement="bottom" />
+                  <PromptProjectSelector controller={props.project} placement="bottom" loading={projectLoading()} />
                   <Show
                     when={props.workspace.bar.visible()}
                     fallback={
