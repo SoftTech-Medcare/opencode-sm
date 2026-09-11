@@ -1,11 +1,15 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "89e4b5a6-20e5-4166-a7cb-d9800eb49f89",
+  "id": "321300fc-e3eb-41e2-a5fc-3bdba2dc33f3",
   "prevIds": [
-    "f14a9b18-8207-487e-a3d3-227e629ba9ad"
+    "af1119e1-0940-4aee-9562-544526b419c9"
   ],
   "ddl": [
+    {
+      "name": "workspace_directory",
+      "entityType": "tables"
+    },
     {
       "name": "workspace",
       "entityType": "tables"
@@ -81,6 +85,66 @@
     {
       "name": "session_share",
       "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "workspace_directory"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "table": "workspace_directory"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "directory",
+      "entityType": "columns",
+      "table": "workspace_directory"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "workspace_directory"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "primary",
+      "entityType": "columns",
+      "table": "workspace_directory"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "workspace_directory"
     },
     {
       "type": "text",
@@ -1494,6 +1558,21 @@
     },
     {
       "columns": [
+        "workspace_id"
+      ],
+      "tableTo": "workspace",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_workspace_directory_workspace_id_workspace_id_fk",
+      "entityType": "fks",
+      "table": "workspace_directory"
+    },
+    {
+      "columns": [
         "project_id"
       ],
       "tableTo": "project",
@@ -1716,6 +1795,15 @@
       "name": "todo_pk",
       "entityType": "pks",
       "table": "todo"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "workspace_directory_pk",
+      "table": "workspace_directory",
+      "entityType": "pks"
     },
     {
       "columns": [
@@ -2170,6 +2258,16 @@
       "name": "todo_session_idx",
       "entityType": "indexes",
       "table": "todo"
+    },
+    {
+      "columns": [
+        "workspace_id",
+        "directory"
+      ],
+      "nameExplicit": false,
+      "name": "workspace_directory_workspace_id_directory_unique",
+      "entityType": "uniques",
+      "table": "workspace_directory"
     }
   ],
   "renames": []

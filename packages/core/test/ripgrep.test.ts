@@ -82,4 +82,31 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("searches multiple directories in parallel and groups results by directory", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const primary = path.join(tmp.path, "primary")
+          const secondary = path.join(tmp.path, "secondary")
+          yield* Effect.promise(() => fs.mkdir(primary, { recursive: true }))
+          yield* Effect.promise(() => fs.mkdir(secondary, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(path.join(primary, "a.txt"), "needle-a\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(secondary, "b.txt"), "needle-b\n"))
+
+          const results = yield* (yield* Ripgrep.Service).grepMulti({
+            directories: [primary, secondary],
+            pattern: "needle",
+            limit: 50,
+          })
+
+          expect(results.map((group) => group.directory).sort()).toEqual([primary, secondary].sort())
+          const byDirectory = Object.fromEntries(results.map((group) => [group.directory, group.matches]))
+          expect(byDirectory[primary].map((match) => match.entry.path)).toContain(RelativePath.make("a.txt"))
+          expect(byDirectory[secondary].map((match) => match.entry.path)).toContain(RelativePath.make("b.txt"))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })

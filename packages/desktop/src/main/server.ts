@@ -6,6 +6,18 @@ import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
+import {
+  checkHealth,
+  createSidecarManager,
+  delay,
+  pollHealth,
+  type SidecarSession,
+  type SidecarManagerDeps,
+  SIDECAR_MAX_RESTARTS,
+  SIDECAR_RESTART_BASE_DELAY,
+  SIDECAR_RESTART_MAX_DELAY,
+  SIDECAR_HEALTH_POLL_INTERVAL,
+} from "./sidecar-manager"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -183,34 +195,8 @@ export async function spawnLocalServer(
       isRunning: () => !exited && !stopping,
     },
     health: { wait },
+    exit: exit.promise,
   }
-}
-
-export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
-  let healthUrls: URL[]
-  try {
-    healthUrls = [new URL("/api/health", url), new URL("/global/health", url)]
-  } catch {
-    return false
-  }
-
-  const headers = new Headers()
-  if (password) {
-    const auth = Buffer.from(`opencode:${password}`).toString("base64")
-    headers.set("authorization", `Basic ${auth}`)
-  }
-
-  for (const healthUrl of healthUrls) {
-    try {
-      const res = await fetch(healthUrl, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(3000),
-      })
-      if (res.ok) return true
-    } catch {}
-  }
-  return false
 }
 
 function createSidecarEnv(): Record<string, string> {
@@ -220,10 +206,6 @@ function createSidecarEnv(): Record<string, string> {
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
   return env
-}
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
 function serializeError(error: unknown) {
@@ -241,32 +223,14 @@ function defer<T>() {
   return { promise, resolve, reject }
 }
 
-export function startHealthMonitor(
-  serverUrl: string,
-  password: string,
-  listener: SidecarListener,
-  onRestart?: (count: number) => void,
-) {
-  let checkInterval: NodeJS.Timeout | null = null
-
-  const check = async () => {
-    if (!listener.isRunning()) return
-
-    const healthy = await checkHealth(serverUrl, password)
-    if (!healthy) {
-      getLogger().warn("Sidecar health check failed, restarting...")
-      try {
-        await listener.stop()
-      } catch {}
-      onRestart?.(1)
-    }
-  }
-
-  checkInterval = setInterval(check, 30000)
-
-  return {
-    stop: () => {
-      if (checkInterval) clearInterval(checkInterval)
-    },
-  }
+export {
+  checkHealth,
+  createSidecarManager,
+  pollHealth,
+  type SidecarSession,
+  type SidecarManagerDeps,
+  SIDECAR_MAX_RESTARTS,
+  SIDECAR_RESTART_BASE_DELAY,
+  SIDECAR_RESTART_MAX_DELAY,
+  SIDECAR_HEALTH_POLL_INTERVAL,
 }

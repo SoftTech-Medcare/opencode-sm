@@ -11,6 +11,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { For, Show, createEffect, createMemo, createResource, createSignal, onMount } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobal } from "@/context/global"
+import { useServerSync } from "@/context/server-sync"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -38,6 +39,7 @@ export function DialogProjectDirectories(props: {
 }) {
   const language = useLanguage()
   const global = useGlobal()
+  const serverSync = useServerSync()
   const dialog = useDialog()
   const openDirectory = useDirectoryPicker()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -89,15 +91,27 @@ export function DialogProjectDirectories(props: {
         setUseProjectAPI(false)
       } catch (error) {
         // If workspace creation fails (e.g., not a git project), fall back to project directories API
-        console.error("Failed to resolve workspace for project:", props.projectID, error)
         setUseProjectAPI(true)
       }
     })()
   })
 
+  const [refreshKey, setRefreshKey] = createSignal(0)
+
+  const [workspaceResolved, setWorkspaceResolved] = createSignal(false)
+
   const [directories, { refetch }] = createResource(
-    () => ({ workspaceID: resolvedWorkspaceID(), projectID: props.projectID, useProjectAPI: useProjectAPI() }),
+    () => ({
+      workspaceID: resolvedWorkspaceID(),
+      projectID: props.projectID,
+      useProjectAPI: useProjectAPI(),
+      resolved: workspaceResolved(),
+      key: refreshKey(),
+    }),
     async (ids) => {
+      // Wait until workspace resolution is complete
+      if (!ids.resolved) return []
+
       if (ids.useProjectAPI && ids.projectID) {
         const result = await serverCtx().sdk.client.project.directories({ projectID: ids.projectID }, { throwOnError: true })
         return result.data ?? []
@@ -115,6 +129,30 @@ export function DialogProjectDirectories(props: {
       return []
     },
   )
+
+  function triggerRefresh() {
+    setRefreshKey((k) => k + 1)
+  }
+
+  async function updateProjectStore() {
+    if (!props.projectID) return
+    try {
+      const result = await serverCtx().sdk.client.project.directories({ projectID: props.projectID }, { throwOnError: true })
+      const updatedDirs = result.data ?? []
+
+      // Update the global store's project entry
+      const syncCtx = serverSync()
+      const projects = syncCtx.data.project
+      const index = projects.findIndex((p) => p.id === props.projectID)
+      if (index !== -1) {
+        const updated = [...projects]
+        updated[index] = { ...updated[index], directories: updatedDirs }
+        syncCtx.set("project", updated)
+      }
+    } catch (error) {
+      console.error("Failed to update project store:", error)
+    }
+  }
 
   const filtered = createMemo(() => {
     const list = directories() ?? []
@@ -258,7 +296,8 @@ async function attach(directory: string) {
     }
     setAddedPath(directory)
     window.setTimeout(() => setAddedPath(undefined), 2500)
-    void refetch()
+    triggerRefresh()
+    updateProjectStore()
   } else {
     const workspaceID = resolvedWorkspaceID()
     if (!workspaceID) return
@@ -279,14 +318,16 @@ async function attach(directory: string) {
     }
     setAddedPath(directory)
     window.setTimeout(() => setAddedPath(undefined), 2500)
-    void refetch()
+    triggerRefresh()
+    updateProjectStore()
   }
 }
 
   async function setPrimary(directory: string) {
     if (useProjectAPI() && props.projectID) {
       await serverCtx().sdk.client.project.directories2.primary({ projectID: props.projectID, body_directory: directory })
-      void refetch()
+      triggerRefresh()
+      updateProjectStore()
     } else {
       const workspaceID = resolvedWorkspaceID()
       if (!workspaceID) return
@@ -294,14 +335,15 @@ async function attach(directory: string) {
         workspaceID,
         directory: directory,
       }, { throwOnError: true })
-      void refetch()
+      triggerRefresh()
     }
   }
 
   async function remove(directory: string) {
     if (useProjectAPI() && props.projectID) {
       await serverCtx().sdk.client.project.directories2.detach({ projectID: props.projectID, body_directory: directory })
-      void refetch()
+      triggerRefresh()
+      updateProjectStore()
     } else {
       const workspaceID = resolvedWorkspaceID()
       if (!workspaceID) return
@@ -309,7 +351,7 @@ async function attach(directory: string) {
         workspaceID,
         directory: directory,
       }, { throwOnError: true })
-      void refetch()
+      triggerRefresh()
     }
   }
 

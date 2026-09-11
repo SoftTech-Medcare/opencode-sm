@@ -14,6 +14,10 @@ import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ID as WorkspaceID } from "@opencode-ai/core/workspace"
+import { WorkspaceRef } from "@/effect/instance-ref"
 import { testEffect } from "../lib/effect"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
@@ -24,7 +28,15 @@ import { Filesystem } from "@/util/filesystem"
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
-    LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
+    LayerNode.group([
+      CrossSpawnSpawner.node,
+      FSUtil.node,
+      Ripgrep.node,
+      WorkspaceDirectories.node,
+      Truncate.node,
+      Agent.node,
+      Git.node,
+    ]),
   )
 
 const it = testEffect(toolLayer())
@@ -218,6 +230,38 @@ describe("tool.grep", () => {
       expect(result.output).toContain(path.join(alias, "test.txt"))
       expect(result.output).not.toContain(path.join(real, "test.txt"))
       expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
+    }),
+  )
+
+  it.instance("groups search results across attached workspace directories", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const secondary = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "primary.txt"), "needle-primary\n"))
+      yield* Effect.promise(() => Bun.write(path.join(secondary, "secondary.txt"), "needle-secondary\n"))
+
+      const workspaceID = WorkspaceID.make("wrk-grep-multi-test")
+      const directoriesLayer = Layer.mock(WorkspaceDirectories.Service, {
+        list: (id) =>
+          Effect.sync(() =>
+            id === workspaceID
+              ? [{ directory: AbsolutePath.make(secondary), role: "frontend", primary: false }]
+              : [],
+          ),
+      })
+
+      const result = yield* Effect.gen(function* () {
+        const info = yield* GrepTool
+        const grep = yield* info.init()
+        return yield* grep.execute({ pattern: "needle" }, ctx)
+      }).pipe(
+        Effect.provideService(WorkspaceRef, workspaceID),
+        Effect.provide(directoriesLayer),
+      )
+
+      expect(result.metadata.matches).toBe(2)
+      expect(result.output).toContain(path.basename(test.directory))
+      expect(result.output).toContain(path.basename(secondary))
     }),
   )
 })

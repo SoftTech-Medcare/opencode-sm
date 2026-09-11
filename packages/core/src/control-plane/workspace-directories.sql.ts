@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, unique } from "drizzle-orm/sqlite-core"
 import { WorkspaceTable } from "./workspace.sql"
 import { WorkspaceV2 } from "../workspace"
 
@@ -14,4 +14,6 @@ export const WorkspaceDirectoryTable = sqliteTable("workspace_directory", {
   time_created: integer()
     .notNull()
     .$default(() => Date.now()),
-})
+}, (table) => ({
+  workspace_directory_unique: unique().on(table.workspace_id, table.directory),
+}))

@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog, Notification } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -29,10 +29,13 @@ import {
   preferAppEnv,
   setDefaultServerUrl,
   spawnLocalServer,
-  startHealthMonitor,
+  createSidecarManager,
+  pollHealth,
   type SidecarListener,
+  type SidecarSession,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { nativeT } from "./native-translations"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
@@ -67,6 +70,7 @@ const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
+let sidecarManager: ReturnType<typeof createSidecarManager> | null = null
 
 const pendingDeepLinks: string[] = []
 
@@ -87,6 +91,7 @@ function emitDeepLinks(urls: string[]) {
 }
 
 async function killSidecar() {
+  await sidecarManager?.stop()
   if (!server) return
   const current = server
   server = null
@@ -376,31 +381,63 @@ const main = Effect.gen(function* () {
     const password = randomUUID()
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
-        userDataPath: app.getPath("userData"),
-        onStdout: (message) => writeLog("server", "stdout", { message }),
-        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      }),
-    )
-    server = listener
+
+    const spawn = (): Promise<SidecarSession> =>
+      new Promise((resolve) => {
+        spawnLocalServer(hostname, port, password, {
+          userDataPath: app.getPath("userData"),
+          onStdout: (message) => writeLog("server", "stdout", { message }),
+          onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+          onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+        }).then((sidecar) => {
+          server = sidecar.listener
+          const startup = sidecar.health.wait.then(
+            () => "ready" as const,
+            () => "down" as const,
+          )
+          const onBad = (async () => {
+            if (await startup !== "ready") return
+            await Promise.race([pollHealth(url, password), sidecar.exit.then(() => undefined)])
+          })()
+          resolve({ startup, onBad, stop: sidecar.listener.stop })
+        })
+      })
+
+    const manager = createSidecarManager({
+      spawn,
+      delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      onRestart: (attempt) => {
+        logger.log("sidecar restarting", { attempt })
+        if (!app.isReady()) return
+        void new Notification({
+          title: nativeT("desktop.server.crash.title"),
+          body: nativeT("desktop.server.crash.message"),
+        }).show()
+      },
+      onExhausted: () => {
+        void Promise.resolve().then(() =>
+          dialog.showMessageBox({
+            type: "error",
+            message: nativeT("desktop.server.unstable.message"),
+            title: nativeT("desktop.server.unstable.title"),
+          }),
+        )
+      },
+      log: (message, data) => logger.log(message, data),
+    })
+    sidecarManager = manager
+
     yield* Deferred.succeed(serverReady, {
       url,
       username: "opencode",
       password,
     })
 
-    // Start health monitoring for sidecar
-    startHealthMonitor(url, password, listener, (count) => {
-      logger.log("sidecar health monitor triggered restart", { count })
-    })
-
     if (process.platform === "win32") {
       void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
     }
 
-    yield* Effect.promise(() => health.wait).pipe(
+    yield* Effect.promise(() => manager.ready).pipe(
       Effect.timeout("30 seconds"),
       Effect.catch((e) =>
         Effect.sync(() => {

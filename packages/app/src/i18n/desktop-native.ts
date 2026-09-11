@@ -278,6 +278,11 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.updater.dialog.restart": "Restart",
   "desktop.updater.dialog.later": "Later",
 
+  "desktop.server.crash.message": "The background server stopped unexpectedly and is restarting.",
+  "desktop.server.crash.title": "Server Restarted",
+  "desktop.server.unstable.message": "The background server failed to start after several attempts. Please try relaunching OpenCode.",
+  "desktop.server.unstable.title": "Server Unavailable",
+
   "desktop.recovery.action.relaunch": "Relaunch",
   "desktop.recovery.action.exportLogs": "Export Logs",
   "desktop.recovery.action.keepWaiting": "Keep Waiting",

@@ -1,7 +1,9 @@
 import { Context, Effect, Layer } from "effect"
 import { Info, Ref, response } from "@opencode-ai/schema/location"
+import { AbsolutePath } from "./schema"
 import { Project } from "./project"
 import { ProjectDirectories } from "./project/directories"
+import { WorkspaceDirectories } from "./control-plane/directories"
 import { LayerNode } from "./effect/layer-node"
 import { makeLocationNode, tags } from "./effect/app-node"
 
@@ -23,9 +25,23 @@ const layer = (ref: Ref) =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const projectDirectories = yield* ProjectDirectories.Service
+      const workspaceDirectories = yield* WorkspaceDirectories.Service
       const resolved = yield* project.resolve(ref.directory)
-      const rows = yield* projectDirectories.list(resolved.id)
-      const directories = rows.length > 0 ? rows.map((row) => row.directory) : [ref.directory]
+
+      // Collect directories from both project and workspace sources
+      const projectRows = yield* projectDirectories.list(resolved.id)
+      const projectDirs = projectRows.map((row) => row.directory)
+
+      let workspaceDirs: AbsolutePath[] = []
+      if (ref.workspaceID) {
+        const wsRows = yield* workspaceDirectories.list(ref.workspaceID)
+        workspaceDirs = wsRows.map((row) => row.directory)
+      }
+
+      // Merge directories, avoiding duplicates
+      const allDirs = new Set([...projectDirs, ...workspaceDirs])
+      const directories = allDirs.size > 0 ? [...allDirs] : [ref.directory]
+
       return Service.of({
         directory: ref.directory,
         workspaceID: ref.workspaceID,
@@ -40,5 +56,5 @@ export const boundNode = (ref: Ref) =>
   makeLocationNode({
     service: Service,
     layer: layer(ref),
-    deps: [Project.node, ProjectDirectories.node],
+    deps: [Project.node, ProjectDirectories.node, WorkspaceDirectories.node],
   })

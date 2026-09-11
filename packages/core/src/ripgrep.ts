@@ -84,11 +84,29 @@ export interface MultiGrepInput {
   readonly signal?: AbortSignal
 }
 
+export interface MultiGrepResult {
+  readonly directory: string
+  readonly matches: readonly Match[]
+}
+
+export interface MultiGlobInput {
+  readonly directories: readonly string[]
+  readonly pattern: string
+  readonly limit: number
+  readonly signal?: AbortSignal
+}
+
+export interface MultiGlobResult {
+  readonly directory: string
+  readonly entries: readonly Entry[]
+}
+
 export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
-  readonly grepMulti: (input: MultiGrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
+  readonly grepMulti: (input: MultiGrepInput) => Effect.Effect<readonly MultiGrepResult[], Error | InvalidPatternError>
+  readonly globMulti: (input: MultiGlobInput) => Effect.Effect<readonly MultiGlobResult[], Error | InvalidPatternError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Ripgrep") {}
@@ -230,13 +248,16 @@ const layer = Layer.effect(
     const grepMulti = Effect.fn("Ripgrep.grepMulti")(function* (input: MultiGrepInput) {
       if (input.directories.length === 0) return []
 
-      // Run grep in parallel across directories with concurrency limit
-      const results = yield* Effect.all(
-        input.directories.map((dir) => grepForDirectory(dir, input)),
+      // Run grep in parallel across directories with concurrency limit, preserving
+      // each directory's results so callers can disambiguate matching paths.
+      return yield* Effect.all(
+        input.directories.map((dir) =>
+          grepForDirectory(dir, input).pipe(
+            Effect.map((matches) => ({ directory: dir, matches } as MultiGrepResult)),
+          ),
+        ),
         { concurrency: 4 },
       )
-
-      return results.flat()
     })
 
     const grep = Effect.fn("Ripgrep.grep")(function* (input: GrepInput) {
@@ -246,6 +267,49 @@ const layer = Layer.effect(
         limit: input.limit,
         signal: input.signal,
       })
+    })
+
+    const globForDirectory = (dir: string, input: Omit<MultiGlobInput, "directories">) =>
+      run<string>({
+        cwd: dir,
+        limit: input.limit,
+        signal: input.signal,
+        args: [
+          "--no-config",
+          "--files",
+          `--glob=${input.pattern}`,
+          "--glob=!**/.git/**",
+          ".",
+        ],
+        parse: (line) =>
+          Effect.succeed(
+            line
+              .replace(/^(?:\.[\\/])+/u, "")
+              .replace(/^[\\/]+/u, "")
+              .replaceAll("\\", "/"),
+          ),
+      }).pipe(
+        Effect.map((result) =>
+          result.items.map((relative) =>
+            Entry.make({
+              path: RelativePath.make(relative),
+              type: "file",
+            }),
+          ),
+        ),
+        Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+      )
+
+    const globMulti = Effect.fn("Ripgrep.globMulti")(function* (input: MultiGlobInput) {
+      if (input.directories.length === 0) return []
+      return yield* Effect.all(
+        input.directories.map((dir) =>
+          globForDirectory(dir, input).pipe(
+            Effect.map((entries) => ({ directory: dir, entries } as MultiGlobResult)),
+          ),
+        ),
+        { concurrency: 4 },
+      )
     })
 
     return Service.of({
@@ -314,6 +378,7 @@ const layer = Layer.effect(
         ),
       grep,
       grepMulti,
+      globMulti,
     })
   }),
 )

@@ -5,6 +5,18 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
+        CREATE TABLE \`workspace_directory\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT,
+          \`workspace_id\` text NOT NULL,
+          \`directory\` text NOT NULL,
+          \`role\` text,
+          \`primary\` integer DEFAULT false NOT NULL,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`fk_workspace_directory_workspace_id_workspace_id_fk\` FOREIGN KEY (\`workspace_id\`) REFERENCES \`workspace\`(\`id\`) ON DELETE CASCADE,
+          CONSTRAINT \`workspace_directory_workspace_id_directory_unique\` UNIQUE(\`workspace_id\`,\`directory\`)
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`type\` text NOT NULL,

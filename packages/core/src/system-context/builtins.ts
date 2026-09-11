@@ -5,6 +5,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { Location } from "../location"
 import { SystemContext } from "./index"
 import { InstructionContext } from "../instruction-context"
+import { WorkspaceContext } from "../workspace-context"
 import { SystemContextRegistry } from "./registry"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
@@ -13,14 +14,18 @@ const builtIns = Layer.effectDiscard(
   Effect.gen(function* () {
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
-    const environment = [
+
+    const envLines = [
       "<env>",
       `  Working directory: ${location.directory}`,
       `  Workspace root folder: ${location.project.directory}`,
       `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
       `  Platform: ${process.platform}`,
-      "</env>",
-    ].join("\n")
+    ]
+
+    envLines.push("</env>")
+    const environment = envLines.join("\n")
+
     const context = SystemContext.combine([
       SystemContext.make({
         key: SystemContext.Key.make("core/environment"),
@@ -46,5 +51,5 @@ const builtIns = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "system-context-builtins",
   layer: builtIns,
-  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node],
+  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, WorkspaceContext.node, FSUtil.node, Global.node],
 })

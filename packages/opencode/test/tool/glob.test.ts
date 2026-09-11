@@ -7,6 +7,10 @@ import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ID as WorkspaceID } from "@opencode-ai/core/workspace"
+import { WorkspaceRef } from "@/effect/instance-ref"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
@@ -22,7 +26,15 @@ import type * as Tool from "../../src/tool/tool"
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
-    LayerNode.group([CrossSpawnSpawner.node, FSUtil.node, Ripgrep.node, Truncate.node, Agent.node, Git.node]),
+    LayerNode.group([
+      CrossSpawnSpawner.node,
+      FSUtil.node,
+      Ripgrep.node,
+      WorkspaceDirectories.node,
+      Truncate.node,
+      Agent.node,
+      Git.node,
+    ]),
   )
 
 const it = testEffect(toolLayer())
@@ -127,6 +139,38 @@ describe("tool.glob", () => {
         const err = Cause.squash(exit.cause)
         expect(err instanceof Error ? err.message : String(err)).toContain("glob path must be a directory")
       }
+    }),
+  )
+
+  it.instance("lists files across attached workspace directories", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const secondary = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "primary.ts"), "export const a = 1\n"))
+      yield* Effect.promise(() => Bun.write(path.join(secondary, "secondary.ts"), "export const b = 1\n"))
+
+      const workspaceID = WorkspaceID.make("wrk-glob-multi-test")
+      const directoriesLayer = Layer.mock(WorkspaceDirectories.Service, {
+        list: (id) =>
+          Effect.sync(() =>
+            id === workspaceID
+              ? [{ directory: AbsolutePath.make(secondary), role: "frontend", primary: false }]
+              : [],
+          ),
+      })
+
+      const result = yield* Effect.gen(function* () {
+        const info = yield* GlobTool
+        const glob = yield* info.init()
+        return yield* glob.execute({ pattern: "*.ts" }, ctx)
+      }).pipe(
+        Effect.provideService(WorkspaceRef, workspaceID),
+        Effect.provide(directoriesLayer),
+      )
+
+      expect(result.metadata.count).toBe(2)
+      expect(result.output).toContain(path.basename(test.directory))
+      expect(result.output).toContain(path.basename(secondary))
     }),
   )
 })
