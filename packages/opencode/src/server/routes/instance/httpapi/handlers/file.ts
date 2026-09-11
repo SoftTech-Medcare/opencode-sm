@@ -41,12 +41,41 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
-      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
+      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number; paths?: string }
     }) {
       const directory = (yield* InstanceState.context).directory
       const limit = ctx.query.limit ?? 10
       const type = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined)
       const started = performance.now()
+
+      // Multi-directory search: if paths is provided, search across multiple directories
+      if (ctx.query.paths) {
+        const directories = ctx.query.paths.split(",").map((p) => p.trim()).filter((p) => p)
+        const allResults: { path: string; directory: string }[] = []
+        for (const dir of directories) {
+          const layer = locations.get(Location.Ref.make({ directory: AbsolutePath.make(dir) }))
+          const results = yield* FileSystem.Service.use((fs) =>
+            fs.find({ query: ctx.query.query, limit: limit / directories.length, type }),
+          ).pipe(
+            Effect.provide(layer),
+            Effect.orDie,
+          )
+          for (const item of results) {
+            // Prefix with directory name to make paths unique across directories
+            allResults.push({ path: path.relative(directory, path.join(dir, item.path)), directory: dir })
+          }
+        }
+        yield* Effect.logInfo("find file multi-directory", {
+          query: ctx.query.query,
+          type,
+          directories: directories.length,
+          limit,
+          results: allResults.length,
+          duration: Math.round(performance.now() - started),
+        })
+        return allResults.map((item) => item.path)
+      }
+
       const found = yield* filesystem(FileSystem.Service.use((fs) => fs.find({ query: ctx.query.query, limit, type })))
       yield* Effect.logInfo("find file", {
         query: ctx.query.query,

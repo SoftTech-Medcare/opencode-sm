@@ -1,4 +1,5 @@
 import { app, dialog } from "electron"
+import { existsSync, statSync } from "node:fs"
 import pkg from "electron-updater"
 import { UPDATER_ENABLED } from "./constants"
 import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
@@ -25,24 +26,54 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     currentVersion: app.getVersion(),
   })
 
+  let updateDownloadPath = ""
+  autoUpdater.on("update-downloaded", (info) => {
+    updateDownloadPath = info.path
+    logger.log("update downloaded", { path: info.path, version: info.version })
+  })
+
   const store = getStore("opencode.updater")
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
     backend: {
       checkForUpdates: () => autoUpdater.checkForUpdates(),
-      downloadUpdate: () => autoUpdater.downloadUpdate(),
+      downloadUpdate: async () => {
+        updateDownloadPath = ""
+        await autoUpdater.downloadUpdate()
+        // Verify download integrity: check the downloaded update file exists
+        // and has a reasonable size (>0 bytes).
+        if (updateDownloadPath) {
+          try {
+            const stats = statSync(updateDownloadPath)
+            if (stats.size === 0) {
+              throw new Error("Downloaded update file is empty")
+            }
+            logger.log("update download verified", { path: updateDownloadPath, size: stats.size })
+          } catch (error) {
+            logger.error("update download verification failed", { path: updateDownloadPath, error })
+            throw error
+          }
+        }
+      },
       quitAndInstall: () => {
-        // quitAndInstall closes all windows before emitting before-quit, so
-        // flag the quit first to keep window ids persisted for restore.
         setAppQuitting()
         try {
           autoUpdater.quitAndInstall()
         } catch (error) {
-          // The install failed and the app keeps running; clear the flag so
-          // deliberate window closes prune ids again.
           setAppQuitting(false)
           throw error
+        }
+      },
+      rollback: async () => {
+        // Rollback to the previous version by allowing downgrade
+        // and checking for the previous version.
+        logger.log("rolling back to previous version")
+        autoUpdater.allowDowngrade = true
+        try {
+          await autoUpdater.checkForUpdates()
+        } finally {
+          autoUpdater.allowDowngrade = false
         }
       },
     },

@@ -27,7 +27,8 @@ import { initializationData } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { windowFullscreen } from "./window-fullscreen"
-import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+import { readyWslConnections } from "./wsl/connections"
+import { resolveStartupServerState, withOptimisticUpdate } from "./state-sync"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
@@ -279,7 +280,12 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     },
 
     setDefaultServer: async (url: string | null) => {
-      await window.api.setDefaultServerUrl(url)
+      const previous = optimisticDefault()
+      await withOptimisticUpdate({
+        apply: () => setOptimisticDefault(url),
+        commit: () => window.api.setDefaultServerUrl(url),
+        revert: () => setOptimisticDefault(previous),
+      })
     },
 
     wslServers: wslServersApi,
@@ -323,6 +329,13 @@ window.api.onMenuCommand((id) => {
 })
 listenForDeepLinks()
 
+const [serverGeneration, setServerGeneration] = createSignal(0)
+window.api.onServerChanged(() => {
+  setServerGeneration((g) => g + 1)
+})
+
+const [optimisticDefault, setOptimisticDefault] = createSignal<string | null | undefined>()
+
 function LoadingSplash() {
   return (
     <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
@@ -345,10 +358,18 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
     return next satisfies Locale
   }
 
-  // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization())
+  // Fetch sidecar credentials (available immediately, before health check).
+  // Track serverGeneration so a sidecar restart re-fetches the current connection.
+  const [sidecar] = createResource(() => {
+    serverGeneration()
+    return window.api.awaitInitialization()
+  })
 
-  const [defaultServer] = createResource(() => platform.getDefaultServer?.())
+  const [defaultServer] = createResource(() => {
+    const optimistic = optimisticDefault()
+    if (optimistic !== undefined) return optimistic ? ServerConnection.Key.make(optimistic) : null
+    return platform.getDefaultServer?.()
+  })
   const [locale] = createResource(loadLocale)
   const router = (props: BaseRouterProps) => (
     <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
@@ -397,9 +418,15 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
       return list
     })
-    const effectiveDefaultServer = createMemo(() =>
-      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
-    )
+    const effectiveDefaultServer = createMemo(() => {
+      const resolved = resolveStartupServerState({
+        defaultServer: defaultServer.latest,
+        wslState: wslServers.data,
+        sidecarReachable: !sidecar.error,
+      })
+      if (resolved.drift.length > 0) console.error("[desktop] resolved server startup drift", resolved)
+      return ServerConnection.Key.make(resolved.key)
+    })
     return (
       <Show when={ready()} fallback={<LoadingSplash />}>
         <Show when={effectiveDefaultServer()} keyed>

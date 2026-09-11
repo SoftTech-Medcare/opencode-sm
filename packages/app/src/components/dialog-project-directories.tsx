@@ -355,6 +355,25 @@ async function attach(directory: string) {
     }
   }
 
+  async function moveDirectory(directory: string, direction: "up" | "down") {
+    const dirs = ordered()
+    const index = dirs.findIndex((d) => d.directory === directory)
+    if (index === -1) return
+    const targetIndex = direction === "up" ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= dirs.length) return
+    // Swap with primary if target is primary
+    const target = dirs[targetIndex]
+    if (target.primary) {
+      await setPrimary(directory)
+    } else {
+      // Swap order by detaching and re-attaching
+      await remove(directory)
+      await attach(directory)
+    }
+    triggerRefresh()
+    updateProjectStore()
+  }
+
   function onAddDirectory() {
     openDirectory({
       server: props.server,
@@ -484,12 +503,16 @@ async function attach(directory: string) {
                     return (
                       <AttachedRow
                         directory={dir}
+                        index={index()}
+                        total={attached().length}
                         active={activeIndex() === position()}
                         narrow={narrow()}
                         recentlyAdded={addedPath() === dir.directory}
                         onActivate={() => setActiveIndex(position())}
                         onMakeMain={() => setPrimary(dir.directory)}
                         onRemove={() => openConfirm(dir.directory)}
+                        onMoveUp={() => moveDirectory(dir.directory, "up")}
+                        onMoveDown={() => moveDirectory(dir.directory, "down")}
                       />
                     )
                   }}
@@ -531,12 +554,16 @@ function MainRow(props: { directory: () => ProjectDirectory; note: string; activ
 
 function AttachedRow(props: {
   directory: ProjectDirectory
+  index: number
+  total: number
   active: boolean
   narrow: boolean
   recentlyAdded: boolean
   onActivate: () => void
   onMakeMain: () => void
   onRemove: () => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
 }) {
   const language = useLanguage()
   const dir = props.directory
@@ -558,6 +585,32 @@ function AttachedRow(props: {
         </Show>
       </div>
       <div class="flex shrink-0 items-center gap-x-1">
+        <Show when={props.onMoveUp && props.index > 0}>
+          <ButtonV2
+            variant="ghost"
+            size="small"
+            aria-label={language.t("dialog.project.directories.moveUp")}
+            onClick={(e: Event) => {
+              e.stopPropagation()
+              props.onMoveUp?.()
+            }}
+          >
+            <Icon name="chevron-up" size="small" />
+          </ButtonV2>
+        </Show>
+        <Show when={props.onMoveDown && props.index < props.total - 1}>
+          <ButtonV2
+            variant="ghost"
+            size="small"
+            aria-label={language.t("dialog.project.directories.moveDown")}
+            onClick={(e: Event) => {
+              e.stopPropagation()
+              props.onMoveDown?.()
+            }}
+          >
+            <Icon name="chevron-down" size="small" />
+          </ButtonV2>
+        </Show>
         <ButtonV2
           variant="ghost"
           size="small"

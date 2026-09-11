@@ -34,6 +34,7 @@ import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
 import { handleIpc, handleIpcSync } from "./ipc-error"
+import { enableIpcCorrelation } from "./ipc-correlation"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -65,6 +66,7 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  enableIpcCorrelation()
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)

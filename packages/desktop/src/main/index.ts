@@ -14,7 +14,8 @@ import contextMenu from "electron-context-menu"
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL } from "./constants"
-import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
+import { broadcastToRenderers, registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
+import { createServerReadyGate } from "./server-connection"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { createMenu } from "./menu"
@@ -257,6 +258,8 @@ const main = Effect.gen(function* () {
   }
 
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
+  let serverConnection: ServerReadyData | undefined
+  const gateServerReady = createServerReadyGate<ServerReadyData>(() => broadcastToRenderers("server-changed"))
 
   yield* Effect.promise(() => app.whenReady())
 
@@ -294,7 +297,7 @@ const main = Effect.gen(function* () {
         logger.log("awaiting server ready")
         const res = yield* Deferred.await(serverReady)
         logger.log("server ready", { url: res.url })
-        return res
+        return serverConnection ?? res
       },
       (e) => Effect.runPromise(e),
     ),
@@ -339,11 +342,12 @@ const main = Effect.gen(function* () {
     if (SIDECAR_VERSION === "v2") {
       logger.log("spawning v2 sidecar")
       const sidecar = yield* Effect.promise(() => startBackgroundCli(logger, shellEnv?.XDG_STATE_HOME))
-      yield* Deferred.succeed(serverReady, {
+      serverConnection = {
         url: sidecar.url,
         username: sidecar.username,
         password: sidecar.password,
-      })
+      }
+      yield* Deferred.succeed(serverReady, serverConnection)
 
       if (process.platform === "win32") {
         void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
@@ -395,6 +399,11 @@ const main = Effect.gen(function* () {
             () => "ready" as const,
             () => "down" as const,
           )
+          startup.then((status) => {
+            if (status !== "ready") return
+            serverConnection = { url, username: "opencode", password }
+            gateServerReady(serverConnection)
+          })
           const onBad = (async () => {
             if (await startup !== "ready") return
             await Promise.race([pollHealth(url, password), sidecar.exit.then(() => undefined)])
@@ -427,11 +436,8 @@ const main = Effect.gen(function* () {
     })
     sidecarManager = manager
 
-    yield* Deferred.succeed(serverReady, {
-      url,
-      username: "opencode",
-      password,
-    })
+    serverConnection = { url, username: "opencode", password }
+    yield* Deferred.succeed(serverReady, serverConnection)
 
     if (process.platform === "win32") {
       void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))

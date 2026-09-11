@@ -26,3 +26,7 @@ export function availableStartupServer(defaultServer: string | null | undefined,
   if (state?.servers.some((item) => item.config.id === key && item.runtime.kind === "ready")) return key
   return "sidecar"
 }
+
+export function firstReadyWslKey(state?: WslServersState) {
+  return state?.servers.find((item) => item.runtime.kind === "ready")?.config.id
+}

@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
+import { electronIpc } from "../test/electron-ipc-mock"
 
 interface Deferred<T> {
   promise: Promise<T>
@@ -16,10 +17,10 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
-let currentInvoke: (channel: string, ...args: unknown[]) => Promise<unknown> = () => Promise.resolve(null)
 mock.module("electron", () => ({
   default: { app: { getPath: () => "/tmp/opencode-desktop-test" } },
-  ipcRenderer: { invoke: (channel: string, ...args: unknown[]) => currentInvoke(channel, ...args) },
+  ipcRenderer: { invoke: (channel: string, ...args: unknown[]) => electronIpc.invoke(channel, ...args) },
+  ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => electronIpc.registered.set(channel, handler) },
 }))
 
 describe("IpcTimeoutError", () => {
@@ -33,22 +34,25 @@ describe("IpcTimeoutError", () => {
 })
 
 describe("invoke", () => {
-  test("passes channel and args to ipcRenderer.invoke with the default timeout", async () => {
+  test("attaches a request id before the channel args", async () => {
     const received: unknown[][] = []
-    currentInvoke = (channel, ...args) => {
+    electronIpc.invoke = (channel, ...args) => {
       received.push([channel, ...args])
       return Promise.resolve("ok")
     }
     const { invoke } = await import("./ipc-timeout")
     expect(await invoke("chan", 1, "two")).toBe("ok")
-    expect(received).toEqual([["chan", 1, "two"]])
+    expect(received).toHaveLength(1)
+    expect(received[0][0]).toBe("chan")
+    expect(typeof received[0][1]).toBe("string")
+    expect(received[0].slice(2)).toEqual([1, "two"])
   })
 })
 
 describe("invokeWithTimeout", () => {
   test("resolves with the handler result before the timeout", async () => {
     const result = deferred<string>()
-    currentInvoke = () => result.promise
+    electronIpc.invoke = () => result.promise
     const { invokeWithTimeout } = await import("./ipc-timeout")
     const promise = invokeWithTimeout("test", ["value"], 1000)
     result.resolve("ok")
@@ -58,7 +62,7 @@ describe("invokeWithTimeout", () => {
   test("rejects with IpcTimeoutError when the handler hangs past the timeout", async () => {
     const { IpcTimeoutError, invokeWithTimeout } = await import("./ipc-timeout")
     const hang = deferred<unknown>()
-    currentInvoke = () => hang.promise
+    electronIpc.invoke = () => hang.promise
     const start = Date.now()
     const promise = invokeWithTimeout("slow", [], 40)
     await expect(promise).rejects.toBeInstanceOf(IpcTimeoutError)
@@ -68,7 +72,7 @@ describe("invokeWithTimeout", () => {
 
   test("clears its timer once the handler resolves", async () => {
     const result = deferred<string>()
-    currentInvoke = () => result.promise
+    electronIpc.invoke = () => result.promise
     const { invokeWithTimeout } = await import("./ipc-timeout")
     const promise = invokeWithTimeout("fast", [], 1000)
     result.resolve("done")
@@ -115,7 +119,7 @@ describe("retry", () => {
     const first = deferred<unknown>()
     const second = deferred<string>()
     let n = 0
-    currentInvoke = () => {
+    electronIpc.invoke = () => {
       n += 1
       return n === 1 ? first.promise : second.promise
     }

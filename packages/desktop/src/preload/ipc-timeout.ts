@@ -59,7 +59,8 @@ export async function retry<T>(fn: () => Promise<T>, attempts = RETRY_ATTEMPTS):
 }
 
 export function invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T> {
-  return retry(() => invokeWithTimeout<T>(channel, args))
+  const requestId = crypto.randomUUID()
+  return retry(() => invokeWithTimeout<T>(channel, [requestId, ...args]))
 }
 
 /**

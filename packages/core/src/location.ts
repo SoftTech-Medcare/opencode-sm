@@ -34,7 +34,7 @@ const layer = (ref: Ref) =>
 
       let workspaceDirs: AbsolutePath[] = []
       if (ref.workspaceID) {
-        const wsRows = yield* workspaceDirectories.list(ref.workspaceID)
+        const wsRows = yield* workspaceDirectories.list(ref.workspaceID).pipe(Effect.catch(() => Effect.succeed([])))
         workspaceDirs = wsRows.map((row) => row.directory)
       }
 

@@ -43,6 +43,12 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
+import { useGlobal } from "@/context/global"
+import { useServerSDK } from "@/context/server-sdk"
+import { createResource } from "solid-js"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { useNavigate } from "@solidjs/router"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
@@ -89,8 +95,25 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
+  const navigate = useNavigate()
   const { sessionKey, tabs, view, params } = useSessionLayout()
   const projectDirectory = createMemo(() => sdk().directory)
+
+  // Fetch project directories for multi-directory navigation
+  const [projectDirs] = createResource(
+    () => projectDirectory(),
+    async (dir) => {
+      try {
+        const projectID = await serverSDK().api.project.current({ location: { directory: dir } })
+          .then((value) => (typeof value === "string" ? value : value.id))
+        const dirs = await serverSDK().api.project.directories({ projectID })
+        return dirs.map((d) => d.directory)
+      } catch {
+        return [dir]
+      }
+    },
+  )
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
@@ -826,6 +849,20 @@ export function SessionSidePanel(props: {
                     </Show>
                     <Show when={fileTreeTab() === "all"}>
                       <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                        <div class="px-2 py-1.5">
+                          <select
+                            value={projectDirectory()}
+                            onChange={(e) => {
+                              const target = e.target as HTMLSelectElement
+                              navigate(`/${base64Encode(target.value)}/session/${params.id}`)
+                            }}
+                            class="w-full rounded-md border border-border-weak-base bg-background-base px-2 py-1 text-xs text-text-base"
+                          >
+                            {(projectDirs() ?? [projectDirectory()]).map((dir) => (
+                              <option value={dir}>{getFilename(dir)}</option>
+                            ))}
+                          </select>
+                        </div>
                         <Switch>
                           <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                           <Match when={true}>

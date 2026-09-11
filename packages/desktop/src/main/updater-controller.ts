@@ -8,6 +8,7 @@ export type UpdaterBackend = {
   checkForUpdates(): Promise<{ isUpdateAvailable?: boolean; updateInfo?: { version?: string } } | null | undefined>
   downloadUpdate(): Promise<unknown>
   quitAndInstall(): void
+  rollback?(): Promise<void>
 }
 
 type UpdaterPersistence = {
@@ -80,16 +81,14 @@ export function createUpdaterController(input: {
       if (state.status !== "ready") throw new Error("Update is not ready to install")
       const version = state.version
       transition({ status: "installing", version })
-      await input
-        .stop()
-        .then(() => {
-          input.backend.quitAndInstall()
-          transition({ status: "ready", version })
-        })
-        .catch((error) => {
-          transition({ status: "ready", version })
-          throw error
-        })
+      try {
+        await input.stop()
+        input.backend.quitAndInstall()
+        transition({ status: "ready", version })
+      } catch (error) {
+        transition({ status: "ready", version })
+        throw error
+      }
     },
     startPeriodicChecks(intervalMs: number = 6 * 60 * 60 * 1000) {
       if (!input.enabled) return () => {}
