@@ -1,5 +1,7 @@
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterEntry } from "@/control-plane/types"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ApiVcsApplyError } from "./instance"
@@ -8,6 +10,24 @@ import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
+
+export const WorkspaceDirectoriesAttachPayload = Schema.Struct({
+  directory: AbsolutePath,
+  type: Schema.Literals(["main", "attached"]).pipe(Schema.optional),
+  primary: Schema.Boolean.pipe(Schema.optional),
+})
+
+export const WorkspaceDirectoriesDetachPayload = Schema.Struct({
+  directory: AbsolutePath,
+})
+
+export const WorkspaceDirectoriesPrimaryPayload = Schema.Struct({
+  directory: AbsolutePath,
+})
+
+export type WorkspaceDirectoriesAttachPayload = typeof WorkspaceDirectoriesAttachPayload.Type
+export type WorkspaceDirectoriesDetachPayload = typeof WorkspaceDirectoriesDetachPayload.Type
+export type WorkspaceDirectoriesPrimaryPayload = typeof WorkspaceDirectoriesPrimaryPayload.Type
 
 const root = "/experimental/workspace"
 export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"]))
@@ -124,6 +144,49 @@ export const WorkspaceApi = HttpApi.make("workspace")
             identifier: "experimental.workspace.warp",
             summary: "Warp session into workspace",
             description: "Move a session's sync history into the target workspace, or detach it to the local project.",
+          }),
+        ),
+        HttpApiEndpoint.get("directories", `${root}/:workspaceID/directories`, {
+          params: { workspaceID: Workspace.Info.fields.id },
+          success: described(WorkspaceDirectories.ListOutput, "Workspace directories"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.directories.list",
+            summary: "List workspace directories",
+            description: "List directories attached to a workspace, including their detected roles.",
+          }),
+        ),
+        HttpApiEndpoint.post("directories.attach", `${root}/:workspaceID/directories`, {
+          params: { workspaceID: Workspace.Info.fields.id },
+          payload: WorkspaceDirectoriesAttachPayload,
+          success: described(WorkspaceDirectories.ListOutput, "Workspace directories after attach"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.directories.attach",
+            summary: "Attach workspace directory",
+            description: "Attach a directory to a workspace.",
+          }),
+        ),
+        HttpApiEndpoint.delete("directories.detach", `${root}/:workspaceID/directories`, {
+          params: { workspaceID: Workspace.Info.fields.id },
+          payload: WorkspaceDirectoriesDetachPayload,
+          success: described(WorkspaceDirectories.ListOutput, "Workspace directories after detach"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.directories.detach",
+            summary: "Detach workspace directory",
+            description: "Detach a directory from a workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("directories.primary", `${root}/:workspaceID/directories/primary`, {
+          params: { workspaceID: Workspace.Info.fields.id },
+          payload: WorkspaceDirectoriesPrimaryPayload,
+          success: described(WorkspaceDirectories.ListOutput, "Workspace directories after setting primary"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.directories.primary",
+            summary: "Set primary workspace directory",
+            description: "Set the primary directory for a workspace.",
           }),
         ),
       )

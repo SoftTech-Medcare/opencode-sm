@@ -11,6 +11,7 @@ import { BackgroundJob } from "@/background/job"
 import { Command } from "@/command"
 import { Config } from "@/config/config"
 import { Workspace } from "@/control-plane/workspace"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import { Env } from "@/env"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "@/format"
@@ -256,6 +257,7 @@ const app = LayerNode.group([
   Project.node,
   Vcs.node,
   Workspace.node,
+  WorkspaceDirectories.node,
   Worktree.node,
   Installation.node,
   ShareNext.node,

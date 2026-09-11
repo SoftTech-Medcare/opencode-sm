@@ -14,7 +14,7 @@ import { useGlobal } from "@/context/global"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { type ProjectDirectory } from "@opencode-ai/sdk/v2"
+import { type ProjectDirectory, type ProjectDirectoryType } from "@opencode-ai/sdk/v2"
 import { ServerConnection } from "@/context/server"
 import { useDirectoryPicker } from "./directory-picker"
 import { showToast } from "@/utils/toast"
@@ -31,7 +31,11 @@ function isEditableTarget(target: EventTarget | null) {
   return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)
 }
 
-export function DialogProjectDirectories(props: { projectID?: string; server: ServerConnection.Any }) {
+export function DialogProjectDirectories(props: {
+  projectID?: string
+  workspaceID?: string
+  server: ServerConnection.Any
+}) {
   const language = useLanguage()
   const global = useGlobal()
   const dialog = useDialog()
@@ -47,12 +51,68 @@ export function DialogProjectDirectories(props: { projectID?: string; server: Se
   const [addedPath, setAddedPath] = createSignal<string | undefined>()
   const [userResized, setUserResized] = createSignal(false)
 
+  // Resolve workspace ID: use provided workspaceID, or create/find one for the project
+  const [resolvedWorkspaceID, setResolvedWorkspaceID] = createSignal<string | undefined>(props.workspaceID)
+  const [useProjectAPI, setUseProjectAPI] = createSignal(false)
+
+  createEffect(() => {
+    if (props.workspaceID) {
+      setResolvedWorkspaceID(props.workspaceID)
+      setUseProjectAPI(false)
+      return
+    }
+    if (!props.projectID) return
+
+    ;(async () => {
+      try {
+        // Check if a workspace already exists for this project
+        const workspaces = await serverCtx().sdk.client.experimental.workspace.list({}, { throwOnError: true })
+
+        // Find a workspace for this project (local workspaces have no branch)
+        const existing = (workspaces.data ?? []).find(
+          (ws) => ws.projectID === props.projectID && !ws.branch
+        )
+
+        if (existing) {
+          setResolvedWorkspaceID(existing.id)
+          setUseProjectAPI(false)
+          return
+        }
+
+        // Create an implicit worktree workspace for this project
+        const created = await serverCtx().sdk.client.experimental.workspace.create({
+          type: "worktree",
+          branch: null,
+        }, { throwOnError: true })
+
+        setResolvedWorkspaceID(created.data.id)
+        setUseProjectAPI(false)
+      } catch (error) {
+        // If workspace creation fails (e.g., not a git project), fall back to project directories API
+        console.error("Failed to resolve workspace for project:", props.projectID, error)
+        setUseProjectAPI(true)
+      }
+    })()
+  })
+
   const [directories, { refetch }] = createResource(
-    () => props.projectID,
-    async (id) => {
-      if (!id) return []
-      const result = await serverCtx().sdk.client.project.directories({ projectID: id }, { throwOnError: true })
-      return result.data ?? []
+    () => ({ workspaceID: resolvedWorkspaceID(), projectID: props.projectID, useProjectAPI: useProjectAPI() }),
+    async (ids) => {
+      if (ids.useProjectAPI && ids.projectID) {
+        const result = await serverCtx().sdk.client.project.directories({ projectID: ids.projectID }, { throwOnError: true })
+        return result.data ?? []
+      }
+      if (ids.workspaceID) {
+        const result = await serverCtx().sdk.client.experimental.directories.list({
+          workspaceID: ids.workspaceID,
+        }, { throwOnError: true })
+        // Map workspace directories to ProjectDirectory type
+        return (result.data ?? []).map((dir) => ({
+          ...dir,
+          type: (dir.primary ? "main" : "attached") as ProjectDirectoryType,
+        }))
+      }
+      return []
     },
   )
 
@@ -180,37 +240,77 @@ export function DialogProjectDirectories(props: { projectID?: string; server: Se
   }
 
 async function attach(directory: string) {
-  if (!props.projectID) return
-  try {
-    await serverCtx().sdk.client.project.directories2.attach({
-      projectID: props.projectID,
-      body_directory: directory,
-      type: "attached",
-      primary: false,
-    })
-  } catch (error) {
-    showToast({
-      variant: "error",
-      title: language.t("common.requestFailed"),
-      description: error instanceof Error ? error.message : String(error),
-    })
-    return
+  if (useProjectAPI() && props.projectID) {
+    try {
+      await serverCtx().sdk.client.project.directories2.attach({
+        projectID: props.projectID,
+        body_directory: directory,
+        type: "attached",
+        primary: false,
+      })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+      return
+    }
+    setAddedPath(directory)
+    window.setTimeout(() => setAddedPath(undefined), 2500)
+    void refetch()
+  } else {
+    const workspaceID = resolvedWorkspaceID()
+    if (!workspaceID) return
+    try {
+      await serverCtx().sdk.client.experimental.directories.attach({
+        workspaceID,
+        directory: directory,
+        type: "attached",
+        primary: false,
+      }, { throwOnError: true })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+      return
+    }
+    setAddedPath(directory)
+    window.setTimeout(() => setAddedPath(undefined), 2500)
+    void refetch()
   }
-  setAddedPath(directory)
-  window.setTimeout(() => setAddedPath(undefined), 2500)
-  void refetch()
 }
 
   async function setPrimary(directory: string) {
-    if (!props.projectID) return
-    await serverCtx().sdk.client.project.directories2.primary({ projectID: props.projectID, body_directory: directory })
-    void refetch()
+    if (useProjectAPI() && props.projectID) {
+      await serverCtx().sdk.client.project.directories2.primary({ projectID: props.projectID, body_directory: directory })
+      void refetch()
+    } else {
+      const workspaceID = resolvedWorkspaceID()
+      if (!workspaceID) return
+      await serverCtx().sdk.client.experimental.directories.primary({
+        workspaceID,
+        directory: directory,
+      }, { throwOnError: true })
+      void refetch()
+    }
   }
 
   async function remove(directory: string) {
-    if (!props.projectID) return
-    await serverCtx().sdk.client.project.directories2.detach({ projectID: props.projectID, body_directory: directory })
-    void refetch()
+    if (useProjectAPI() && props.projectID) {
+      await serverCtx().sdk.client.project.directories2.detach({ projectID: props.projectID, body_directory: directory })
+      void refetch()
+    } else {
+      const workspaceID = resolvedWorkspaceID()
+      if (!workspaceID) return
+      await serverCtx().sdk.client.experimental.directories.detach({
+        workspaceID,
+        directory: directory,
+      }, { throwOnError: true })
+      void refetch()
+    }
   }
 
   function onAddDirectory() {
@@ -360,7 +460,7 @@ async function attach(directory: string) {
       </DialogBody>
 
       <DialogFooter>
-        <ButtonV2 class="w-full" disabled={!props.projectID || !directories()} onClick={onAddDirectory}>
+        <ButtonV2 class="w-full" disabled={(useProjectAPI() ? !props.projectID : !resolvedWorkspaceID()) || !directories()} onClick={onAddDirectory}>
           <Icon name="folder-add-left" />
           {language.t("dialog.project.directories.add")}
         </ButtonV2>
@@ -377,6 +477,9 @@ function MainRow(props: { directory: () => ProjectDirectory; note: string; activ
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <span class="truncate text-sm text-text-strong">{getFilename(props.directory().directory)}</span>
           <span class="truncate text-xs text-muted-foreground" title={props.directory().directory}>{props.directory().directory}</span>
+          <Show when={props.directory().role}>
+            <span class="text-xs text-muted-foreground capitalize">{props.directory().role}</span>
+          </Show>
         </div>
       </div>
       <div class="mt-1.5 text-xs text-muted-foreground">{props.note}</div>
@@ -407,6 +510,9 @@ function AttachedRow(props: {
         <span class="truncate text-sm text-text-strong">{getFilename(dir.directory)}</span>
         <Show when={!props.narrow}>
           <span class="truncate text-xs text-muted-foreground" title={dir.directory}>{dir.directory}</span>
+        </Show>
+        <Show when={dir.role}>
+          <span class="text-xs text-muted-foreground capitalize">{dir.role}</span>
         </Show>
       </div>
       <div class="flex shrink-0 items-center gap-x-1">

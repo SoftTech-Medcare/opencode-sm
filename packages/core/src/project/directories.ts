@@ -7,6 +7,8 @@ import { makeGlobalNode } from "../effect/app-node"
 import { AbsolutePath, optional } from "../schema"
 import { ProjectSchema } from "./schema"
 import { ProjectDirectoryTable } from "./sql"
+import { FSUtil } from "../fs-util"
+import { detectDirectoryRole } from "../util/directory-role"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 
 export type DirectoryType = "main" | "attached"
@@ -16,6 +18,7 @@ export interface Directory {
   readonly type: DirectoryType
   readonly primary: boolean
   readonly strategy?: string
+  readonly role?: string
 }
 
 export interface DirectoryWithProject extends Directory {
@@ -48,6 +51,7 @@ export const ListOutput = Schema.Array(
     type: Schema.Literals(["main", "attached"]),
     primary: Schema.Boolean,
     strategy: optional(Schema.String),
+    role: optional(Schema.String),
   }),
 ).annotate({ identifier: "Project.Directories" })
 export type ListOutput = typeof ListOutput.Type
@@ -158,6 +162,7 @@ const layer = Layer.effect(
         type: row.type ?? "attached",
         primary: row.primary,
         strategy: row.strategy ?? undefined,
+        role: detectDirectoryRole(row.directory) ?? undefined,
       }))
     })
 

@@ -3194,6 +3194,8 @@ export type ProjectDirectory = {
   directory: string
   type: ProjectDirectoryType
   primary: boolean
+  strategy?: string
+  role?: string
 }
 
 export type EventServerInstanceDisposed = {
@@ -3862,6 +3864,7 @@ export type ProjectDirectories = Array<{
   type: "main" | "attached"
   primary: boolean
   strategy?: string
+  role?: string
 }>
 
 export type PtyTicketConnectToken = {
@@ -3873,6 +3876,12 @@ export type WorkspaceEventConnectionStatus = {
   workspaceID: string
   status: "connected" | "connecting" | "disconnected" | "error"
 }
+
+export type WorkspaceDirectories = Array<{
+  directory: string
+  role?: string
+  primary: boolean
+}>
 
 export type LocationInfo = {
   directory: string
@@ -11345,6 +11354,130 @@ export type ExperimentalWorkspaceWarpResponses = {
 
 export type ExperimentalWorkspaceWarpResponse =
   ExperimentalWorkspaceWarpResponses[keyof ExperimentalWorkspaceWarpResponses]
+
+export type ExperimentalWorkspaceDirectoriesDetachData = {
+  body?: {
+    directory: string
+  }
+  path: {
+    workspaceID: string
+  }
+  query?: never
+  url: "/experimental/workspace/{workspaceID}/directories"
+}
+
+export type ExperimentalWorkspaceDirectoriesDetachErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceDirectoriesDetachError =
+  ExperimentalWorkspaceDirectoriesDetachErrors[keyof ExperimentalWorkspaceDirectoriesDetachErrors]
+
+export type ExperimentalWorkspaceDirectoriesDetachResponses = {
+  /**
+   * Workspace directories after detach
+   */
+  200: WorkspaceDirectories
+}
+
+export type ExperimentalWorkspaceDirectoriesDetachResponse =
+  ExperimentalWorkspaceDirectoriesDetachResponses[keyof ExperimentalWorkspaceDirectoriesDetachResponses]
+
+export type ExperimentalWorkspaceDirectoriesListData = {
+  body?: never
+  path: {
+    workspaceID: string
+  }
+  query?: never
+  url: "/experimental/workspace/{workspaceID}/directories"
+}
+
+export type ExperimentalWorkspaceDirectoriesListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceDirectoriesListError =
+  ExperimentalWorkspaceDirectoriesListErrors[keyof ExperimentalWorkspaceDirectoriesListErrors]
+
+export type ExperimentalWorkspaceDirectoriesListResponses = {
+  /**
+   * Workspace directories
+   */
+  200: WorkspaceDirectories
+}
+
+export type ExperimentalWorkspaceDirectoriesListResponse =
+  ExperimentalWorkspaceDirectoriesListResponses[keyof ExperimentalWorkspaceDirectoriesListResponses]
+
+export type ExperimentalWorkspaceDirectoriesAttachData = {
+  body?: {
+    directory: string
+    type?: "main" | "attached"
+    primary?: boolean
+  }
+  path: {
+    workspaceID: string
+  }
+  query?: never
+  url: "/experimental/workspace/{workspaceID}/directories"
+}
+
+export type ExperimentalWorkspaceDirectoriesAttachErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceDirectoriesAttachError =
+  ExperimentalWorkspaceDirectoriesAttachErrors[keyof ExperimentalWorkspaceDirectoriesAttachErrors]
+
+export type ExperimentalWorkspaceDirectoriesAttachResponses = {
+  /**
+   * Workspace directories after attach
+   */
+  200: WorkspaceDirectories
+}
+
+export type ExperimentalWorkspaceDirectoriesAttachResponse =
+  ExperimentalWorkspaceDirectoriesAttachResponses[keyof ExperimentalWorkspaceDirectoriesAttachResponses]
+
+export type ExperimentalWorkspaceDirectoriesPrimaryData = {
+  body?: {
+    directory: string
+  }
+  path: {
+    workspaceID: string
+  }
+  query?: never
+  url: "/experimental/workspace/{workspaceID}/directories/primary"
+}
+
+export type ExperimentalWorkspaceDirectoriesPrimaryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceDirectoriesPrimaryError =
+  ExperimentalWorkspaceDirectoriesPrimaryErrors[keyof ExperimentalWorkspaceDirectoriesPrimaryErrors]
+
+export type ExperimentalWorkspaceDirectoriesPrimaryResponses = {
+  /**
+   * Workspace directories after setting primary
+   */
+  200: WorkspaceDirectories
+}
+
+export type ExperimentalWorkspaceDirectoriesPrimaryResponse =
+  ExperimentalWorkspaceDirectoriesPrimaryResponses[keyof ExperimentalWorkspaceDirectoriesPrimaryResponses]
 
 export type V2HealthGetData = {
   body?: never

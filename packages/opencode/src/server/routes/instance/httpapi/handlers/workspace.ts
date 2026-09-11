@@ -2,16 +2,31 @@ import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Vcs } from "@/project/vcs"
+import { WorkspaceDirectories } from "@opencode-ai/core/control-plane/directories"
 import { Cause, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { notFound } from "../errors"
 import { ApiVcsApplyError } from "../groups/instance"
-import { ApiWorkspaceCreateError, ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
+import {
+  ApiWorkspaceCreateError,
+  ApiWorkspaceWarpError,
+  CreatePayload,
+  WarpPayload,
+  WorkspaceDirectoriesAttachPayload,
+  WorkspaceDirectoriesDetachPayload,
+  WorkspaceDirectoriesPrimaryPayload,
+} from "../groups/workspace"
+import type {
+  WorkspaceDirectoriesAttachPayload as WorkspaceDirectoriesAttachPayloadType,
+  WorkspaceDirectoriesDetachPayload as WorkspaceDirectoriesDetachPayloadType,
+  WorkspaceDirectoriesPrimaryPayload as WorkspaceDirectoriesPrimaryPayloadType,
+} from "../groups/workspace"
 
 export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspace", (handlers) =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
+    const workspaceDirectories = yield* WorkspaceDirectories.Service
 
     const adapters = Effect.fn("WorkspaceHttpApi.adapters")(function* () {
       const instance = yield* InstanceState.context
@@ -90,6 +105,45 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
         )
     })
 
+    const directories = Effect.fn("WorkspaceHttpApi.directories")(function* (ctx: {
+      params: { workspaceID: Workspace.Info["id"] }
+    }) {
+      return yield* workspaceDirectories.list(ctx.params.workspaceID)
+    })
+
+    const directoriesAttach = Effect.fn("WorkspaceHttpApi.directoriesAttach")(function* (ctx: {
+      params: { workspaceID: Workspace.Info["id"] }
+      payload: WorkspaceDirectoriesAttachPayloadType
+    }) {
+      yield* workspaceDirectories.attach({
+        ...ctx.payload,
+        workspaceID: ctx.params.workspaceID,
+      })
+      return yield* workspaceDirectories.list(ctx.params.workspaceID)
+    })
+
+    const directoriesDetach = Effect.fn("WorkspaceHttpApi.directoriesDetach")(function* (ctx: {
+      params: { workspaceID: Workspace.Info["id"] }
+      payload: WorkspaceDirectoriesDetachPayloadType
+    }) {
+      yield* workspaceDirectories.detach({
+        ...ctx.payload,
+        workspaceID: ctx.params.workspaceID,
+      })
+      return yield* workspaceDirectories.list(ctx.params.workspaceID)
+    })
+
+    const directoriesPrimary = Effect.fn("WorkspaceHttpApi.directoriesPrimary")(function* (ctx: {
+      params: { workspaceID: Workspace.Info["id"] }
+      payload: WorkspaceDirectoriesPrimaryPayloadType
+    }) {
+      yield* workspaceDirectories.setPrimary({
+        ...ctx.payload,
+        workspaceID: ctx.params.workspaceID,
+      })
+      return yield* workspaceDirectories.list(ctx.params.workspaceID)
+    })
+
     return handlers
       .handle("adapters", adapters)
       .handle("list", list)
@@ -98,5 +152,9 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
       .handle("status", status)
       .handle("remove", remove)
       .handle("warp", warp)
+      .handle("directories", directories)
+      .handle("directories.attach", directoriesAttach)
+      .handle("directories.detach", directoriesDetach)
+      .handle("directories.primary", directoriesPrimary)
   }),
 )

@@ -50,6 +50,14 @@ import type {
   ExperimentalWorkspaceAdapterListResponses,
   ExperimentalWorkspaceCreateErrors,
   ExperimentalWorkspaceCreateResponses,
+  ExperimentalWorkspaceDirectoriesAttachErrors,
+  ExperimentalWorkspaceDirectoriesAttachResponses,
+  ExperimentalWorkspaceDirectoriesDetachErrors,
+  ExperimentalWorkspaceDirectoriesDetachResponses,
+  ExperimentalWorkspaceDirectoriesListErrors,
+  ExperimentalWorkspaceDirectoriesListResponses,
+  ExperimentalWorkspaceDirectoriesPrimaryErrors,
+  ExperimentalWorkspaceDirectoriesPrimaryResponses,
   ExperimentalWorkspaceListErrors,
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
@@ -1009,6 +1017,152 @@ export class Adapter extends HeyApiClient {
   }
 }
 
+export class Directories extends HeyApiClient {
+  /**
+   * Detach workspace directory
+   *
+   * Detach a directory from a workspace.
+   */
+  public detach<ThrowOnError extends boolean = false>(
+    parameters: {
+      workspaceID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "workspaceID" },
+            { in: "body", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ExperimentalWorkspaceDirectoriesDetachResponses,
+      ExperimentalWorkspaceDirectoriesDetachErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{workspaceID}/directories",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List workspace directories
+   *
+   * List directories attached to a workspace, including their detected roles.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      workspaceID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "workspaceID" }] }])
+    return (options?.client ?? this.client).get<
+      ExperimentalWorkspaceDirectoriesListResponses,
+      ExperimentalWorkspaceDirectoriesListErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{workspaceID}/directories",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Attach workspace directory
+   *
+   * Attach a directory to a workspace.
+   */
+  public attach<ThrowOnError extends boolean = false>(
+    parameters: {
+      workspaceID: string
+      directory?: string
+      type?: "main" | "attached"
+      primary?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "workspaceID" },
+            { in: "body", key: "directory" },
+            { in: "body", key: "type" },
+            { in: "body", key: "primary" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalWorkspaceDirectoriesAttachResponses,
+      ExperimentalWorkspaceDirectoriesAttachErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{workspaceID}/directories",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set primary workspace directory
+   *
+   * Set the primary directory for a workspace.
+   */
+  public primary<ThrowOnError extends boolean = false>(
+    parameters: {
+      workspaceID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "workspaceID" },
+            { in: "body", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalWorkspaceDirectoriesPrimaryResponses,
+      ExperimentalWorkspaceDirectoriesPrimaryErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{workspaceID}/directories/primary",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Workspace extends HeyApiClient {
   /**
    * List workspaces
@@ -1244,6 +1398,11 @@ export class Workspace extends HeyApiClient {
   get adapter(): Adapter {
     return (this._adapter ??= new Adapter({ client: this.client }))
   }
+
+  private _directories?: Directories
+  get directories(): Directories {
+    return (this._directories ??= new Directories({ client: this.client }))
+  }
 }
 
 export class Experimental extends HeyApiClient {
@@ -1280,6 +1439,11 @@ export class Experimental extends HeyApiClient {
   private _workspace?: Workspace
   get workspace(): Workspace {
     return (this._workspace ??= new Workspace({ client: this.client }))
+  }
+
+  private _directories?: Directories
+  get directories(): Directories {
+    return (this._directories ??= new Directories({ client: this.client }))
   }
 }
 
@@ -2533,7 +2697,7 @@ export class Mcp extends HeyApiClient {
   }
 }
 
-export class Directories extends HeyApiClient {
+export class Directories2 extends HeyApiClient {
   /**
    * Detach a project directory
    *
@@ -2858,9 +3022,9 @@ export class Project extends HeyApiClient {
     })
   }
 
-  private _directories?: Directories
-  get directories2(): Directories {
-    return (this._directories ??= new Directories({ client: this.client }))
+  private _directories?: Directories2
+  get directories2(): Directories2 {
+    return (this._directories ??= new Directories2({ client: this.client }))
   }
 }
 
