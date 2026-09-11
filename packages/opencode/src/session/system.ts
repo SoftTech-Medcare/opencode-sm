@@ -81,17 +81,30 @@ const layer: Layer.Layer<
         // Include workspace directory structure if available
         let workspaceInfo = ""
         const workspaceID = yield* InstanceState.workspaceID
+        Effect.logInfo("system prompt workspace check", {
+          workspaceID,
+          directory: ctx.directory,
+          projectID: ctx.project.id,
+        })
         if (workspaceID) {
           try {
             const directories = yield* workspaceDirectories.list(workspaceID).pipe(
               Effect.catch(() => Effect.succeed([]))
             )
+            Effect.logInfo("workspace directories loaded", {
+              workspaceID,
+              count: directories.length,
+              directories: directories.map((d) => d.directory),
+            })
             if (directories.length > 1) {
+              const primaryDir = directories.find((d) => d.primary)
               workspaceInfo = `\n<workspace_directories>\n` +
-                `  This workspace spans ${directories.length} directories:\n` +
+                `  This workspace spans ${directories.length} directories. When searching for files or features, search across ALL directories, not just the primary directory.\n\n` +
+                `  Directories:\n` +
                 directories.map((dir) =>
                   `  - ${dir.directory} (primary: ${dir.primary}${dir.role ? `, role: ${dir.role}` : ""})`
                 ).join("\n") +
+                (primaryDir ? `\n\n  The working directory is ${primaryDir.directory}. Use relative paths like ../OtherDir/ to access other workspace directories.` : "") +
                 `\n</workspace_directories>`
             }
           } catch {

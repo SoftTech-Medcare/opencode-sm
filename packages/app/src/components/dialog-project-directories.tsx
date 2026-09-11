@@ -61,6 +61,7 @@ export function DialogProjectDirectories(props: {
     if (props.workspaceID) {
       setResolvedWorkspaceID(props.workspaceID)
       setUseProjectAPI(false)
+      setWorkspaceResolved(true)
       return
     }
     if (!props.projectID) return
@@ -78,6 +79,7 @@ export function DialogProjectDirectories(props: {
         if (existing) {
           setResolvedWorkspaceID(existing.id)
           setUseProjectAPI(false)
+          setWorkspaceResolved(true)
           return
         }
 
@@ -89,9 +91,11 @@ export function DialogProjectDirectories(props: {
 
         setResolvedWorkspaceID(created.data.id)
         setUseProjectAPI(false)
+        setWorkspaceResolved(true)
       } catch (error) {
         // If workspace creation fails (e.g., not a git project), fall back to project directories API
         setUseProjectAPI(true)
+        setWorkspaceResolved(true)
       }
     })()
   })

@@ -13,6 +13,9 @@ import { HttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InvalidRequestError } from "../errors"
+import { Database } from "@opencode-ai/core/database/database"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { eq } from "drizzle-orm"
 
 // Query fields this middleware reads from the URL. Spread into every
 // endpoint query schema in groups that apply WorkspaceRoutingMiddleware,
@@ -54,7 +57,7 @@ export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
   WorkspaceRoutingMiddleware,
   {
     provides: WorkspaceRouteContext
-    requires: Session.Service
+    requires: Session.Service | Database.Service
   }
 >()("@opencode/ExperimentalHttpApiWorkspaceRouting") {}
 
@@ -160,18 +163,34 @@ function planWorkspaceRequest(
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
   session?: Session.Info,
-): Effect.Effect<RequestPlan, never, Workspace.Service> {
+): Effect.Effect<RequestPlan, never, Workspace.Service | Database.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
-    const workspaceID = url.pathname.startsWith("/api/")
+    let resolvedID = url.pathname.startsWith("/api/")
       ? selectedV2WorkspaceID(url, session?.workspaceID)
       : selectedWorkspaceID(url, session?.workspaceID)
-    if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
-    const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
+    if (resolvedID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
 
-    if (workspaceID && workspace === undefined && !envWorkspaceID) {
-      return RequestPlan.MissingWorkspace({ workspaceID })
+    // If session doesn't have a workspace ID but has a project ID,
+    // try to resolve the workspace ID from the project
+    if (!resolvedID && session?.projectID) {
+      const { db } = yield* Database.Service
+      const row = yield* db
+        .select({ id: WorkspaceTable.id })
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, session.projectID))
+        .get()
+        .pipe(Effect.orDie)
+      if (row?.id) {
+        resolvedID = row.id
+      }
+    }
+
+    const workspace = yield* resolveWorkspace(resolvedID, envWorkspaceID)
+
+    if (resolvedID && workspace === undefined && !envWorkspaceID) {
+      return RequestPlan.MissingWorkspace({ workspaceID: resolvedID })
     }
 
     if (workspace !== undefined && !envWorkspaceID && !shouldStayOnControlPlane(request, url)) {
@@ -180,7 +199,7 @@ function planRequest(
 
     return RequestPlan.Local({
       directory: session?.directory || defaultDirectory(request, url),
-      workspaceID: envWorkspaceID ?? workspaceID,
+      workspaceID: envWorkspaceID ?? resolvedID,
     })
   })
 }
@@ -215,7 +234,7 @@ function routeHttpApiWorkspace<E>(
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   E,
-  Session.Service | Workspace.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
+  Session.Service | Workspace.Service | Database.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
 > {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
@@ -240,10 +259,12 @@ export const workspaceRoutingLayer = Layer.effect(
     const makeWebSocket = yield* Socket.WebSocketConstructor
     const workspace = yield* Workspace.Service
     const client = yield* HttpClient.HttpClient
+    const database = yield* Database.Service
     return WorkspaceRoutingMiddleware.of((effect) =>
       routeHttpApiWorkspace(client, effect).pipe(
         Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
         Effect.provideService(Workspace.Service, workspace),
+        Effect.provideService(Database.Service, database),
       ),
     )
   }),
